@@ -18,8 +18,9 @@
 # 5. Analyze mendeley articles (top 2). Conclusion: We can get citations and number of readers from mendeley, not very helpful for attention in the media.
 # 6. Analyze facebook articles (top 3). Conclusion: We can get the number of shares, comments and reactions from facebook, this is helpful for attention in the media.
 # 7. Deep dive into facebook articles (Get Likes, Shares and Comments if the post is still available)
-  # 7.0 Function definition 
-
+  # 7.0 Function definition
+  # 7.1 Define scrping parameters
+  # 7.2 Scrape the facebook posts
 
 # 0. Packages
 import pandas as pd, os, time, math
@@ -263,18 +264,18 @@ def generate_scrap_batches(df):
     return ruc_vector_list
 
     
-#  Function parameters
+# 7.1  Define scrping parameters
 urls_to_scrap = gen_urls_to_scrap_df(wd_path = wd_path)  # Pending urls to scrap
 batches = generate_scrap_batches(df = urls_to_scrap)     # Divide the urls into batches
 wait_seconds = 1
 max_retries = 3
 num_batches = len(batches)
 
+# 7.2  Scrape the facebook posts
 for i in range(0,num_batches):
         print("Current batch: ", i)
         url_vect = batches[i]
         x = facebook_cust_like_scraper(url_vec = url_vect, wait_seconds = wait_seconds, max_retries = max_retries)
-
 # Save the final DataFrame
 y = gen_scrapped_urls_final_df(facebook_df= facebook_df, wd_path = wd_path)
 

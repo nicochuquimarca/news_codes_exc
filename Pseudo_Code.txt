@@ -1,0 +1,11 @@
+# Pseudo Code
+# 1. Identify the number of websites these articles come from
+# 2. Identify the number of articles per website
+# 3. Filter the articles that come from the top-25 websites
+# 4. Analyze nber articles (top 1). Conclusion: these urls are not very helpful to measure attention, they direct me straight into the pdfs.
+# 5. Analyze mendeley articles (top 2). Conclusion: We can get citations and number of readers from mendeley, not very helpful for attention in the media.
+# 6. Analyze facebook articles (top 3). Conclusion: We can get the number of shares, comments and reactions from facebook, this is helpful for attention in the media.
+# 7. Deep dive into facebook articles (Get Likes, Shares and Comments if the post is still available)
+  # 7.0 Function definition
+  # 7.1 Define scrping parameters
+  # 7.2 Scrape the facebook posts
