@@ -3,6 +3,7 @@
 #             2. With the dictionary in hand, filter authors coming from institutions of interest
 # Author: Nicolas Chuquimarca (QMUL)
 # version 0.1: 2025-01-21: First version
+# version 1.1: 2025-01-24: Search for the second and third author affiliations and check if they belong to the US and not in the previous dataset
 
 # Function List
 # Fn01: num_affs_tests = Get the max number of affiliations per author and check for potential NULL values
@@ -27,6 +28,14 @@
 # 7. Do a left-join to get the final DataFrame (The final dictionary)
 # 8. Start with the author filtering
 # 9. Merge the final dictionary with the authors DataFrame and filter the authors in institutions of interest
+
+# Pending Tasks
+# 1. Generate a dataset for people whos second or third affiliation country code is the US
+# 2. Filter by id those who do not belong to the first final dataset produced
+# 3. Merge that with their 
+
+# Setp n ---> The final dataset should be one with affiliation1, affiliation2, affiliation3, and some column indicating which affiliation is the one that was merged with the dictionary
+
 
 # 0. Packages
 import os, pandas as pd, ast, requests, math
@@ -334,7 +343,66 @@ merge_df = pd.merge(df_new, final_dictionary_df, on = "id", how = "left")
 filtered_merge_df = merge_df[merge_df['grid_id_string'].notnull()]
 # filtered_merge_df.to_csv("data\\raw\\open_alex\\openalex_authors_final.csv", index = False)
 
-# Read the filtered dataset
-filtered_df = pd.read_csv("data\\raw\\open_alex\\openalex_authors_final.csv")
 
-filtered_df
+
+
+
+##### TEST ZONE: DESING AN EFFICIENT WAY TO GET THE SECOND AND THIRD AFFILIATION ####
+
+# FnXX: extract_and_filter_affs_details_mult_affs = Convert the 'affiliations' column from JSON strings to Python objects for more than one affiliation
+def extract_and_filter_affs_details_mult_affs(df):
+    # FOR NOW IT WORKS ONLY FOR TWO AFFILIATIONS
+    df = df[df['affs_count'] == 2]
+    return df
+df_tt_01 = extract_and_filter_affs_details_mult_affs(df_tt_01)
+
+
+
+max_naffs_tt, df_tt = open_and_do_minimal_cleaning(file_path_01, filter = False, filter_value = 1)
+df_tt_01 = df_tt.copy()
+df_tt_01.shape[0]
+
+
+# FnXX: extract_affiliation_details = Function to extract affiliation details efficiently
+def extract_mult_affiliation_details(affiliations):
+    if affiliations and len(affiliations) == 1:
+        affiliation1 = affiliations[0]  # Assuming there's is only one affiliation
+        return (affiliation1['institution']['id'], affiliation1['institution']['country_code'], affiliation1['institution']['display_name'],
+                None,None,None,
+                None,None, None)
+    if affiliations and len(affiliations) == 2:
+        affiliation1 = affiliations[0]
+        affiliation2 = affiliations[1]
+        return (affiliation1['institution']['id'], affiliation1['institution']['country_code'], affiliation1['institution']['display_name'],
+                affiliation2['institution']['id'], affiliation2['institution']['country_code'], affiliation2['institution']['display_name'],
+                None,None, None)
+    if affiliations and len(affiliations) >= 3:
+        affiliation1 = affiliations[0]
+        affiliation2 = affiliations[1]
+        affiliation3 = affiliations[2]
+        return (affiliation1['institution']['id'], affiliation1['institution']['country_code'], affiliation1['institution']['display_name'],
+                affiliation2['institution']['id'], affiliation2['institution']['country_code'], affiliation2['institution']['display_name'],
+                affiliation3['institution']['id'], affiliation3['institution']['country_code'], affiliation3['institution']['display_name'])
+    return (None, None, None, 
+            None, None, None,
+            None, None, None)
+
+# FnXX: extract_and_filter_affs_details_mult_affs = Convert the 'affiliations' column from JSON strings to Python objects for more than one affiliation
+def extract_and_filter_affs_details_mult_affs(df):
+    df['affiliations'] = df['affiliations'].apply(ast.literal_eval)
+    # Extract the details using vectorized operations
+    (df['affiliation_id1'], df['country_code1'], df['institution_display_name1'],
+     df['affiliation_id2'], df['country_code2'], df['institution_display_name2'],
+     df['affiliation_id3'], df['country_code3'], df['institution_display_name3']) = zip(*df['affiliations'].apply(extract_mult_affiliation_details))
+    return df
+
+
+
+df_tt_01 = extract_and_filter_affs_details_mult_affs(df_tt_01)
+
+df_tt_01
+
+
+### USE THIS LATER WHEN YOU FINISH WITH THE TWO AFFILIATIONS CASE
+# Filter the guys with more than one affiliation 
+df_tt_01 = df_tt_01[df_tt_01['affs_count'] > 1]
