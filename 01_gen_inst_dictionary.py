@@ -1,10 +1,14 @@
                                 # Research in the Media
 # Objectives: 1. Produce a institution dictionary that connects institution ids (id and grid_id_string) 
 #             2. With the dictionary in hand, filter authors coming from institutions of interest
+#             3. Filter those authors that have their second or third affiliation in the US and not in the previous dataset 
+#             4. Get a number of works produced by year for each author in the final dataset 
 # Author: Nicolas Chuquimarca (QMUL)
 # version 0.1: 2025-01-21: First version
 # version 1.1: 2025-01-24: Search for the second and third author affiliations and check if they belong to the US and not in the previous dataset
 # version 1.2: 2025-01-25: Generate the final dataset with the authors that have their second or third affiliation in the US
+# version 2.1: 2025-01-28: Connect to the API to search for the years in which each author produced a publication
+# version 2.2: 2025-01-29: Continue with the API connection and save the results in a DataFrame, do testing and save the results
 
 # Function List
 # Fn01: num_affs_tests = Get the max number of affiliations per author and check for potential NULL values
@@ -22,6 +26,17 @@
 # Fn13: extract_and_filter_affs_details_mult_affs = Convert the 'affiliations' column from JSON strings to Python objects for more than one affiliation
 # Fn14: filter_affs_2and3_US = Filter the authors with their second or third affiliation in the US
 # Fn15: prepare_dict_for_temp_merge = Prepare the dictionary for the temporary merge
+# Fn16: fill_na_ycols_to_the_left = Fill the missing years to the left when creating a DataFrame
+# Fn17: fill_na_ycols_to_the_right = Fill the missing years to the right when creating a DataFrame
+# Fn18: handle_missing_years = Handle the missing years in the years vector
+# Fn19: format_author_df = Format the final df the get_works_by_year function produces
+# Fn20: gen_empty_author_df = Generate an empty DataFrame for authors that have no data (either not found by the API or deleted)
+# Fn21: get_works_by_year = Get the works by year for a given author_id
+# Fn22: process_author_id = Function that enable multiple workers to call the get_works_by_year function
+# Fn23: linear_works_by_year = Linear process to get the works by year for a list of authors
+# Fn24: parallel_works_by_year = Parallel process to get the works by year for a list of authors
+# Fn25: gen_final_works_by_year_csv = Generate the final works by year DataFrame
+# Fn26: gen_authors_ids_to_call = Generate the authors ids to call the API
 
 # Pseudo Code
 # 1. Working directory
@@ -36,11 +51,14 @@
 # 10. Generate a dataset for people whos second or third affiliation country code is the US but their first affiliation is not in the previous dataset
 # 11. Merge the new dataset with the final dictionary in an iterative way to not overload the memory
 # 12. Look for potential duplicates from the previous dataset, drop them and save the final dataset
+# 13. Generate a dataset with the number of works by year (from 2012 to 2025) for each author by calling the API
 
 # 0. Packages
 import os, pandas as pd, ast, requests, math
 from datetime import date                                     # Get the current date
 from datetime import datetime                                 # Get the current date and time
+import concurrent.futures                                     # For parallel processing
+import time                                                   # For time measurement
 
 # Fn01: num_affs_tests = Get the max number of affiliations per author and check for potential NULL values
 def num_affs_tests(df):
@@ -187,7 +205,6 @@ def get_institution_info(wd_path,ids_vector):
         df_id = get_one_institution_info(id)
         # Append the df to the list
         institutions_list.append(df_id)
-        # Print the progress
     
     # Concatenate the list of dataframes
     institutions_df = pd.concat(institutions_list, axis = 0)
@@ -249,17 +266,17 @@ def gen_final_institutions_info_csv(wd_path):
     return final_df
 
 # Fn11: generate_scrap_batches = Divide the Dataframe into the scrap batches
-def generate_id_batches(df):
+def generate_id_batches(df,batch_size):
     # Parameters
     num_rows = len(df)                  # Number of rows in the DataFrame
-    num_batches = math.ceil(num_rows/100) # Number of batches to scrap
+    num_batches = math.ceil(num_rows/batch_size) # Number of batches to scrap
     id_vector_list = []                # List to store the id vectors
     
     for i in range(num_batches):
         if i == num_batches-1:
-            id_vector = df.iloc[i*100:num_rows, 0]
+            id_vector = df.iloc[i*batch_size:num_rows, 0]
         else:
-            id_vector = df.iloc[i*100:i*100+100, 0]
+            id_vector = df.iloc[i*batch_size:i*batch_size+batch_size, 0]
         id_vector_list.append(id_vector)
     # Print an informative message on how many batches are pending to scrap
     id_vector_len = len(id_vector_list)
@@ -322,6 +339,258 @@ def prepare_dict_for_temp_merge(df,affs_num):
         df['dummy_col_aff3'] = 1
     return df
 
+# Fn16: fill_na_ycols_to_the_left = Fill the missing years to the left when creating a DataFrame
+def fill_na_ycols_to_the_left(df,max_year):
+    num_lfill_columns = 2025 - max_year
+    lfill_column_names = ['y' + str(max_year + 1 + i) for i in range(num_lfill_columns)]
+    # Add the new columns with None values
+    for col in lfill_column_names:
+        df[col] = None
+    # Return the DataFrame
+    return df
+
+# Fn17: fill_na_ycols_to_the_right = Fill the missing years to the right when creating a DataFrame
+def fill_na_ycols_to_the_right(df,min_year):
+    num_rfill_columns = min_year - 2012
+    rfill_column_names = ['y' + str(min_year - 1 - i) for i in range(num_rfill_columns)]
+    # Add the new columns with None values
+    for col in rfill_column_names:
+        df[col] = None
+    # Return the DataFrame
+    return df
+
+# Fn18: handle_missing_years = Handle the missing years in the years vector
+def handle_missing_years(years,works_counts,max_year,min_year):
+    # Check wich years are missing in the years vector
+    all_years_set = set(range(min_year, max_year +1)) # Set of all years
+    emp_years_set = set(years)                        # Set of empirical years
+    missing_years = all_years_set - emp_years_set     # Set difference
+    missing_years = list(missing_years)               # Convert to list
+
+    # Generate the dataframe with the years as columns
+    # Create a DataFrame
+    df = pd.DataFrame({
+        'year': years,
+        'works_count': works_counts
+    })
+    # Create a new dataframe with the missing years
+    df_missing = pd.DataFrame({
+        'year': missing_years,
+        'works_count': [0]*len(missing_years)   
+    })
+    # Now concatenate the two DataFrames and sort the years in descending order
+    df = pd.concat([df, df_missing], axis = 0)
+    df = df.sort_values(by = 'year', ascending = False)
+    # Transform back to vectors the years and works_counts
+    years_new = df['year'].values
+    works_counts_new = df['works_count'].values
+    # Return the two vectors
+    return years_new, works_counts_new
+
+# Fn19: format_author_df = Format the final df the get_works_by_year function produces
+def format_author_df(df,aid_id,aid_display_name,author_id):
+    # Add some extra columns to the dataframe
+    df['author_id'] = aid_id
+    df['author_display_name'] = aid_display_name
+    df['author_id_API'] = author_id
+    # Reorder the DataFrame in a desired way
+    desired_order = ['author_id', 'author_display_name', 'author_id_API'] # Put this columns into the first positions
+    remaining_columns = [col for col in df.columns if col not in desired_order] # Get the remaining columns
+    new_order = desired_order + remaining_columns # Combine the desired order with the remaining columns
+    df = df[new_order] # Reorder the DataFrame
+    return df
+
+# Fn20: gen_empty_author_df = Generate an empty DataFrame for authors that have no data (either not found by the API or deleted)
+def gen_empty_author_df(aid_id,aid_display_name,author_id):
+    # Define and return an empty dataframe
+    df = pd.DataFrame({
+        'y2025': [None],'y2024': [None],'y2023': [None],'y2022': [None],
+        'y2021': [None],'y2020': [None],'y2019': [None],'y2018': [None],
+        'y2017': [None],'y2016': [None],'y2015': [None],'y2014': [None],
+        'y2013': [None],'y2012': [None]
+    })
+    df = format_author_df(df,aid_id,aid_display_name,author_id)
+    return df
+
+# Fn21: get_works_by_year = Get the works by year for a given author_id
+def get_works_by_year(author_id):
+    # Call the API
+    aid_response = requests.get(author_id)
+    # Check if the response is successful
+    aid_response_test = aid_response.status_code
+    if aid_response_test != 200:
+        # If the response is not successful return an empty DataFrame
+        aid_display_name = None
+        extract_id = lambda author_id: author_id.split('/')[-1]
+        idnum = extract_id(author_id) # Use the lambda function
+        aid_id = 'https://openalex.org/' + idnum
+        df = gen_empty_author_df(aid_id,aid_display_name,author_id)
+        return df
+    elif aid_response_test == 200:
+        # Get the data
+        aid_data  = aid_response.json()
+        aid_counts_b_year = aid_data.get('counts_by_year',[])
+        aid_display_name  = aid_data.get('display_name')
+        aid_id = aid_data.get('id')
+        if aid_display_name == 'Deleted Author':
+            # If the response is not successful return an empty DataFrame
+            aid_display_name = 'Deleted Author'
+            extract_id = lambda author_id: author_id.split('/')[-1]
+            idnum = extract_id(author_id) # Use the lambda function
+            aid_id = 'https://openalex.org/' + idnum
+            df = gen_empty_author_df(aid_id,aid_display_name,author_id)
+            return df
+        if not aid_counts_b_year:
+            # If the aid_counts_b_year is empty return an empty DataFrame
+            extract_id = lambda author_id: author_id.split('/')[-1]
+            idnum = extract_id(author_id) # Use the lambda function
+            aid_id = 'https://openalex.org/' + idnum
+            df = gen_empty_author_df(aid_id,aid_display_name,author_id)
+            return df
+        else: 
+            # Extract years, works counts and cited by counts in different vectors
+            years = [entry['year'] for entry in aid_counts_b_year]
+            works_counts = [entry['works_count'] for entry in aid_counts_b_year]
+            cited_by_counts = [entry['cited_by_count'] for entry in aid_counts_b_year]
+            # Get the max year recorded for that author
+            max_year = max(years)
+            min_year = min(years)
+            exp_num_columns = max_year - min_year + 1 # Expected number of columns
+            emp_num_columns = len(years)              # Empirical number of columns
+            # Check if the number of columns is different from the expected number of columns
+            if exp_num_columns != emp_num_columns:
+                # Handle the missing years
+                years_new, works_counts_new = handle_missing_years(years,works_counts,max_year,min_year)
+                works_counts = works_counts_new
+                num_columns = len(years_new) # Number of columns after handling missing years
+            else:
+                years_new = years
+                num_columns = len(years_new) # Number of columns after handling missing years
+            # Create the base DataFrame
+            num_columns = len(years_new) # Number of columns after handling missing years
+            column_names = ['y' + str(max_year - i) for i in range(num_columns)]
+            df = pd.DataFrame([works_counts], columns=column_names)
+            # Handle complete or incomplete datasets
+            if num_columns == 14 and max_year == 2025 and min_year == 2012:
+                # Complete dataset, do nothing
+                None
+            elif num_columns < 14 and max_year == 2025 and min_year > 2012:
+                # Fill to the right
+                df = fill_na_ycols_to_the_right(df,min_year)
+            elif num_columns < 14 and max_year < 2025 and min_year == 2012:
+                # Fill to the left"
+                df = fill_na_ycols_to_the_left(df,max_year)
+            elif num_columns < 14 and max_year < 2025 and min_year > 2012:
+                # Fill both sides
+                df = fill_na_ycols_to_the_left(df,max_year)
+                df = fill_na_ycols_to_the_right(df,min_year)
+            # Sort the columns names in desceding order
+            df = df.reindex(sorted(df.columns, reverse=True), axis=1)
+            df = format_author_df(df,aid_id,aid_display_name,author_id)
+            return df
+
+# Fn22: process_author_id = Function that enable multiple workers to call the get_works_by_year function
+def process_author_id(author_id):
+    # 3 workers --> time sleep = 0.05
+    # 4 workers --> time sleep = 0.20
+    time.sleep(0.06) # Introduce a small delay between requests
+    return get_works_by_year(author_id)
+
+# Fn23: linear_works_by_year = Linear process to get the works by year for a list of authors
+def linear_works_by_year(wd_path,authors_vec):
+    # Linear process
+    authors_list = []
+    # Iterate over the author_ids
+    for current_iter, id in enumerate(authors_vec, start=1):  # start=1 to start counting from 1
+        # Get the df of the current id
+        df_author_id = get_works_by_year(id)
+        # Append the df to the list
+        authors_list.append(df_author_id)
+    # Concatenate the list of dataframes
+    linear_authors_df = pd.concat(authors_list, axis = 0)
+    # Save the DataFrame
+    # Get the dates to save the files
+    current_time = datetime.now()
+    date_string  = date_time_string(current_time = current_time)
+    path = wd_path + "\\data\\raw\\open_alex\\authors_works_by_year\\authors_works_by_y_"+date_string+".csv"
+    linear_authors_df.to_csv(path, index = False)
+    print("Institutions information has been saved in the following path: ", path)
+    # Return the DataFrame
+    return linear_authors_df
+
+# Fn24: parallel_works_by_year = Parallel process to get the works by year for a list of authors
+def parallel_works_by_year(wd_path,authors_vec):
+    # Parallel process, limited to 3 workers due to API response constraints
+    # Initialize an empty list to store the results
+    authors_list = []
+    # Use ThreadPoolExecutor to parallelize the API requests
+    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+        # Map the process_author_id function to the authors_vec
+        results = list(executor.map(process_author_id, authors_vec))
+    # Filter out None or empty DataFrames
+    authors_list = [df for df in results if df is not None and not df.empty]
+    # Concatenate the list of dataframes
+    parallel_authors_df = pd.concat(authors_list, axis=0)
+    current_time = datetime.now()
+    date_string  = date_time_string(current_time = current_time)
+    path = wd_path + "\\data\\raw\\open_alex\\authors_works_by_year\\authors_works_by_y_"+date_string+".csv"
+    parallel_authors_df.to_csv(path, index = False)
+    print("Institutions information has been saved in the following path: ", path)
+    # Return the DataFrame
+    return parallel_authors_df
+
+# Fn25: gen_final_works_by_year_csv = Generate the final works by year DataFrame
+def gen_final_works_by_year_csv(wd_path):
+    folder_path = wd_path + "\\data\\raw\\open_alex\\authors_works_by_year"
+    files_vector = os.listdir(folder_path) # Get all the files in the folder
+    # 2. Initialize an empty list to store DataFrames
+    dfs = []
+    # 3. Iterate over each file in the directory
+    for file in files_vector:
+       if file.endswith('.csv'):
+          file_path = os.path.join(folder_path, file) # Get the file path
+          df = pd.read_csv(file_path)
+          dfs.append(df)
+    # 4. Concatenate all DataFrames in the list into a single DataFrame
+    final_df = pd.concat(dfs, ignore_index=True)
+    # 5. Save the final DataFrame
+    final_file_path = wd_path + "\\data\\raw\\open_alex\\openalex_authors_works_by_years.csv"
+    final_df.to_csv(final_file_path, index = False)
+    print("The final institutions information has been saved successfully")
+    return final_df
+
+# Fn26: gen_authors_ids_to_call = Generate the authors ids to call the API
+def gen_authors_ids_to_call(wd_path):
+    # Open the data
+    # Lets prepare the data to call the get_works_by_year function multiple times
+    file_path = "data\\raw\\open_alex\\openalex_authors_final.csv"
+    df_authors = pd.read_csv(file_path)
+    df_authors.rename(columns = {'pub_id':'author_id'}, inplace = True)
+    df_authors['author_id_red'] = df_authors['author_id'].apply(lambda x: x.split('/')[-1])
+    df_authors['author_id_API'] = "https://api.openalex.org/people/" + df_authors['author_id_red']
+    # Select specific columns
+    sel_cols = ['author_id_API']
+    df_authors = df_authors[sel_cols]
+
+    # Open the final_df to check if the id is already in the final_df
+    fdf_path = wd_path + "\\data\\raw\\open_alex\\openalex_authors_works_by_years.csv"
+    fdf = pd.read_csv(fdf_path)
+    fdf = fdf[['author_id_API']]
+    fdf['dummy_col'] = 1
+    
+    # Merge the two DataFrames to get which ones have not been called
+    merged_df = pd.merge(df_authors, fdf, on = "author_id_API", how = "left")
+
+    # Get rid of those observations with dummy_col = 1 in the merged_df
+    merged_df = merged_df[merged_df['dummy_col'].isnull()]
+
+    # Return only the ids to call
+    merged_df = merged_df[['author_id_API']]
+
+    # Return the pending to scrap DataFrame
+    return merged_df
+
+
 # 1. Working directory
 wd_path = "C:\\Users\\nicoc\\Dropbox\\Pre_OneDrive_USFQ\\PCNICOLAS_HP_PAVILION\\Masters\\Applications2023\\EconMasters\\QMUL\\QMUL_Bursary"
 os.chdir(wd_path)
@@ -363,7 +632,7 @@ combined_ids_df.drop_duplicates(subset='affiliation_id_red', keep='first', inpla
 
 # 4. Prepare the information of the institutions that will call the API
 ids_to_call_df = gen_ids_to_call(wd_path=wd_path)
-ids_batch = generate_id_batches(ids_to_call_df)
+ids_batch = generate_id_batches(df=ids_to_call_df,batch_size=100)
 num_batches  = 100
 for i in range(0,num_batches):
         print("Current batch: ", i)
@@ -486,3 +755,21 @@ df_new_merged_final = df_new_merged_final[df_new_merged_final['duplicates_test']
 df_new_merged_final.drop(columns = ['duplicates_test'], inplace = True)
     # 12.2 Save the final dataset
 # df_new_merged_final.to_csv("data\\raw\\open_alex\\openalex_authors_final_affs2and3.csv", index = False)
+
+
+# 13. Generate a dataset with the number of works by year (from 2012 to 2025) for each author by calling the API
+# Calling the API: Linear vs Parallel Performance
+# Batch size = 100,  Parallel Process: 14  seconds, Linear Process: 34  seconds
+# Batch size = 1000, Parallel Process: 142 seconds, Linear Process: 384 seconds (2.70 times slower)
+authors_works_df = gen_authors_ids_to_call(wd_path = wd_path) # Get the authors ids to call the API
+authors_ids_batch = generate_id_batches(df = authors_works_df, batch_size = 1000) # Transform the DataFrame into batches
+num_batches = 200 # Set the number of batches to call the API (1 batch = 1000 authors)
+for i in range(0,num_batches):             # Iterate over each batch
+        print("Current batch: ", i)        # Print the current batch to the user
+        authors_vec = authors_ids_batch[i] # Define the authors vector
+        # Linear Process (used for debug)
+        # authors_work = linear_works_by_year(wd_path = wd_path,authors_vec = authors_vec)
+        # Parallel Process (used to call the API)
+        authors_work = parallel_works_by_year(wd_path = wd_path,authors_vec = authors_vec)
+# Save the final dataframe
+x = gen_final_works_by_year_csv(wd_path = wd_path)
