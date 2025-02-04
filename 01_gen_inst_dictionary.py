@@ -9,6 +9,8 @@
 # version 1.2: 2025-01-25: Generate the final dataset with the authors that have their second or third affiliation in the US
 # version 2.1: 2025-01-28: Connect to the API to search for the years in which each author produced a publication
 # version 2.2: 2025-01-29: Continue with the API connection and save the results in a DataFrame, do testing and save the results
+# version 3.1: 2025-02-01: Produce Institution authors output specific datasets and save them
+# version 4.1: 2025-04-02: Generate Caltech researchers dataset and save it
 
 # Function List
 # Fn01: num_affs_tests = Get the max number of affiliations per author and check for potential NULL values
@@ -559,12 +561,33 @@ def gen_final_works_by_year_csv(wd_path):
     print("The final institutions information has been saved successfully")
     return final_df
 
-# Fn26: gen_authors_ids_to_call = Generate the authors ids to call the API
-def gen_authors_ids_to_call(wd_path):
+# Fn26: get_uni_ror = Get the ror code for a given university name
+def get_uni_ror(uni_name):
+    # Open the file
+    name_ror_fpath = wd_path + "\\data\\raw\\open_alex\\institutions_name_ror.xlsx"
+    name_ror_df    = pd.read_excel(name_ror_fpath)
+    # Filter the file
+    name_ror_df    = name_ror_df[name_ror_df['aarc_name'] == uni_name] 
+    # Run a test whether the filtering is working
+    rows = name_ror_df.shape[0]
+    assert rows == 1, f"{uni_name} not found, please check the name"
+    print(f"{uni_name} found")
+    # Get the ror code and return to the user
+    ror_code = name_ror_df['ror'].iloc[0]
+    return ror_code
+
+# Fn27: gen_authors_ids_to_call = Generate the authors ids to call the API
+def gen_authors_ids_to_call(wd_path, uni_name, source):
     # Open the data
     # Lets prepare the data to call the get_works_by_year function multiple times
-    file_path = "data\\raw\\open_alex\\openalex_authors_final.csv"
+    if source == "main":
+        file_path = "data\\raw\\open_alex\\openalex_authors_final.csv"
+    elif source == "secondary":
+        file_path = "data\\raw\\open_alex\\openalex_authors_final_affs2and3.csv"
     df_authors = pd.read_csv(file_path)
+    # Filter the University using the ror code
+    ror_code = get_uni_ror(uni_name = uni_name)
+    df_authors = df_authors[df_authors['ror'] == ror_code]
     df_authors.rename(columns = {'pub_id':'author_id'}, inplace = True)
     df_authors['author_id_red'] = df_authors['author_id'].apply(lambda x: x.split('/')[-1])
     df_authors['author_id_API'] = "https://api.openalex.org/people/" + df_authors['author_id_red']
@@ -589,6 +612,46 @@ def gen_authors_ids_to_call(wd_path):
 
     # Return the pending to scrap DataFrame
     return merged_df
+
+# Fn28: gen_author_works_by_institution = Generate the authors works by year for a given institution
+def gen_author_works_by_institution(wd_path,uni_name,file_name):
+    # 1. Open the data provided by Bernhard
+    file_path = wd_path + "\\data\\raw\\open_alex\\openalex_cleaned_names_all_affs.csv"
+    df_authors_new = pd.read_csv(file_path) # Data provided by Bernhard
+    # 2. Open the university dictionary
+    file_path = wd_path + "\\data\\raw\\open_alex\\Final_sample_AARC_IPEDS_filtered_with_id.csv"
+    df_dictionary = pd.read_csv(file_path) # University dictionary
+    sel_columns = ['ipeds_id','ipeds_name','ror'] # Filter the columns
+    df_dictionary = df_dictionary[sel_columns] # Filter the columns
+    # 3. Merge the two DataFrames
+    df_authors_ror = pd.merge(df_authors_new, df_dictionary, on = "ipeds_id", how = "left")
+    # 4. Filter only the university specific authors
+    ror_code = get_uni_ror(uni_name = uni_name)
+    df_authors_uni = df_authors_ror[df_authors_ror['ror'] == ror_code]
+    # 5. Open the authors works by year DataFrame
+    file_path = wd_path + "\\data\\raw\\open_alex\\openalex_authors_works_by_years.csv"
+    df_authors_works = pd.read_csv(file_path)
+    df_authors_works = df_authors_works.fillna(0)
+    columns_to_sum = ['y2025', 'y2024', 'y2023', 'y2022', 'y2021', 'y2020', 'y2019', 'y2018', 'y2017', 'y2016', 'y2015', 'y2014', 'y2013', 'y2012']
+    df_authors_works['works_2012_2025'] = df_authors_works[columns_to_sum].sum(axis=1)
+    df_authors_works['PersonId'] = df_authors_works['author_id_API'].apply(lambda x: x.split('/')[-1])
+    df_authors_works.rename(columns = {'author_display_name':'author_API_name'}, inplace = True)
+    sel_columns = ['PersonId','works_2012_2025','y2025','y2024','y2023','y2022','y2021','y2020','y2019','y2018','y2017','y2016','y2015','y2014','y2013','y2012','author_API_name']
+    df_authors_works = df_authors_works[sel_columns]
+    df_authors_works = df_authors_works.drop_duplicates()
+    # 6. Merge with the University specific authors
+    df_authors_uni_works = pd.merge(df_authors_uni, df_authors_works, on = "PersonId", how = "left")
+    # 7. Test if there are still authors to query
+    null_df = df_authors_uni_works[df_authors_uni_works['works_2012_2025'].isnull()]
+    rtest = null_df.shape[0]
+    if rtest == 0:
+        print("All authors have been queried")
+    else:
+        print("There are still authors to query, either run the secondary source or the get_missing_authors fn")
+    # 8. Save the file and print a message to the user and return the DataFrame
+    df_authors_uni_works.to_csv("data\\raw\\open_alex\\openalex_"+file_name+"_authors_works_by_years.csv", index = False)
+    print("The DataFrame has been saved successfully")
+    return df_authors_uni_works
 
 
 # 1. Working directory
@@ -756,14 +819,15 @@ df_new_merged_final.drop(columns = ['duplicates_test'], inplace = True)
     # 12.2 Save the final dataset
 # df_new_merged_final.to_csv("data\\raw\\open_alex\\openalex_authors_final_affs2and3.csv", index = False)
 
-
 # 13. Generate a dataset with the number of works by year (from 2012 to 2025) for each author by calling the API
 # Calling the API: Linear vs Parallel Performance
 # Batch size = 100,  Parallel Process: 14  seconds, Linear Process: 34  seconds
 # Batch size = 1000, Parallel Process: 142 seconds, Linear Process: 384 seconds (2.70 times slower)
-authors_works_df = gen_authors_ids_to_call(wd_path = wd_path) # Get the authors ids to call the API
+authors_works_df = gen_authors_ids_to_call(wd_path = wd_path, 
+                                           uni_name = 'Yale University',
+                                           source = "main" ) # Get the authors ids to call the API
 authors_ids_batch = generate_id_batches(df = authors_works_df, batch_size = 1000) # Transform the DataFrame into batches
-num_batches = 200 # Set the number of batches to call the API (1 batch = 1000 authors)
+num_batches = 9  # Set the number of batches to call the API (1 batch = 1000 authors)
 for i in range(0,num_batches):             # Iterate over each batch
         print("Current batch: ", i)        # Print the current batch to the user
         authors_vec = authors_ids_batch[i] # Define the authors vector
@@ -773,3 +837,28 @@ for i in range(0,num_batches):             # Iterate over each batch
         authors_work = parallel_works_by_year(wd_path = wd_path,authors_vec = authors_vec)
 # Save the final dataframe
 x = gen_final_works_by_year_csv(wd_path = wd_path)
+
+# 14. Produce institution specific works by year DataFrame (replaced flow code with a fn)
+uni_df = gen_author_works_by_institution(wd_path = wd_path,uni_name = 'Princeton University', file_name = 'princeton')
+
+
+
+############################ EXPERIMENTAL CODE ##########################
+
+
+### PENDING JOB: CLEAN AND FILTER THOSE GUYS THAT COME FROM CALTECH
+
+# 15. Generate the datasets for people from Caltech (requires paths01-paths06)
+# 15.1 Open the dataframes
+max_naffs_01, df_01 = open_and_do_minimal_cleaning(file_path_01, filter = True, filter_value = 1)
+df_01_us = extract_and_filter_affs_details(df_01)
+max_naffs_02, df_02 = open_and_do_minimal_cleaning(file_path_02, filter = True, filter_value = 1)
+df_02_us = extract_and_filter_affs_details(df_02)
+max_naffs_03, df_03 = open_and_do_minimal_cleaning(file_path_03, filter = True, filter_value = 1)
+df_03_us = extract_and_filter_affs_details(df_03)
+max_naffs_04, df_04 = open_and_do_minimal_cleaning(file_path_04, filter = True, filter_value = 1)
+df_04_us = extract_and_filter_affs_details(df_04)
+max_naffs_05, df_05 = open_and_do_minimal_cleaning(file_path_05, filter = True, filter_value = 1)
+df_05_us = extract_and_filter_affs_details(df_05)
+max_naffs_06, df_06 = open_and_do_minimal_cleaning(file_path_06, filter = True, filter_value = 1)
+df_06_us = extract_and_filter_affs_details(df_06)
