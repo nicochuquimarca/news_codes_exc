@@ -11,6 +11,7 @@
 # version 2.2: 2025-01-29: Continue with the API connection and save the results in a DataFrame, do testing and save the results
 # version 3.1: 2025-02-01: Produce Institution authors output specific datasets and save them
 # version 4.1: 2025-04-02: Generate Caltech researchers dataset and save it
+# version 4.2: 2025-06-02: Continue with the Caltech researchers dataset and save it
 
 # Function List
 # Fn01: num_affs_tests = Get the max number of affiliations per author and check for potential NULL values
@@ -38,7 +39,12 @@
 # Fn23: linear_works_by_year = Linear process to get the works by year for a list of authors
 # Fn24: parallel_works_by_year = Parallel process to get the works by year for a list of authors
 # Fn25: gen_final_works_by_year_csv = Generate the final works by year DataFrame
-# Fn26: gen_authors_ids_to_call = Generate the authors ids to call the API
+# Fn26: get_uni_ror = Get the ror code for a given university name
+# Fn27: gen_authors_ids_to_call = Generate the authors ids to call the API
+# Fn28: format_df_author_works = Format the intermediate DataFrame for the author works by year
+# Fn29: gen_author_works_by_institution = Generate the authors works by year for a given institution
+# Fn30: caltech_affs_matched_row = Intermediate function to see which of the affiliation matched with caltech
+# Fn31: format_caltech_raw_authors_dfs = Format the raw authors DataFrames for Caltech
 
 # Pseudo Code
 # 1. Working directory
@@ -54,13 +60,18 @@
 # 11. Merge the new dataset with the final dictionary in an iterative way to not overload the memory
 # 12. Look for potential duplicates from the previous dataset, drop them and save the final dataset
 # 13. Generate a dataset with the number of works by year (from 2012 to 2025) for each author by calling the API
+# 14. Produce institution specific works by year DataFrame (replaced flow code with a fn)
+# 15. Generate the datasets for people whos first affiliation is Caltech
+# 16. Generate the datasets for people whos second or third affiliation is Caltech
+# 17. Look for potential duplicates from the previous dataset first affiliation dataset, drop them and save the final dataset
+# 18. Produce the Caltech specific works by year DataFrame (the parameters in this case must remain fixed)
 
 # 0. Packages
 import os, pandas as pd, ast, requests, math
-from datetime import date                                     # Get the current date
-from datetime import datetime                                 # Get the current date and time
-import concurrent.futures                                     # For parallel processing
-import time                                                   # For time measurement
+from datetime import date                      # Get the current date
+from datetime import datetime                  # Get the current date and time
+import concurrent.futures                      # For parallel processing
+import time                                    # For time measurement
 
 # Fn01: num_affs_tests = Get the max number of affiliations per author and check for potential NULL values
 def num_affs_tests(df):
@@ -584,11 +595,18 @@ def gen_authors_ids_to_call(wd_path, uni_name, source):
         file_path = "data\\raw\\open_alex\\openalex_authors_final.csv"
     elif source == "secondary":
         file_path = "data\\raw\\open_alex\\openalex_authors_final_affs2and3.csv"
+    elif source == "main_caltech":
+        file_path = "data\\raw\\open_alex\\openalex_caltech_authors_final.csv"
+    elif source == "secondary_caltech":
+        file_path = "data\\raw\\open_alex\\openalex_caletch_authors_final_affs2and3.csv"
     df_authors = pd.read_csv(file_path)
     # Filter the University using the ror code
     ror_code = get_uni_ror(uni_name = uni_name)
     df_authors = df_authors[df_authors['ror'] == ror_code]
-    df_authors.rename(columns = {'pub_id':'author_id'}, inplace = True)
+    if source == "main" or source == "secondary":
+            df_authors.rename(columns = {'pub_id':'author_id'}, inplace = True)
+    elif source == "main_caltech" or source == "secondary_caltech":
+            df_authors.rename(columns = {'PersonId':'author_id'}, inplace = True)
     df_authors['author_id_red'] = df_authors['author_id'].apply(lambda x: x.split('/')[-1])
     df_authors['author_id_API'] = "https://api.openalex.org/people/" + df_authors['author_id_red']
     # Select specific columns
@@ -613,11 +631,37 @@ def gen_authors_ids_to_call(wd_path, uni_name, source):
     # Return the pending to scrap DataFrame
     return merged_df
 
-# Fn28: gen_author_works_by_institution = Generate the authors works by year for a given institution
-def gen_author_works_by_institution(wd_path,uni_name,file_name):
-    # 1. Open the data provided by Bernhard
-    file_path = wd_path + "\\data\\raw\\open_alex\\openalex_cleaned_names_all_affs.csv"
-    df_authors_new = pd.read_csv(file_path) # Data provided by Bernhard
+# Fn28: format_df_author_works = Format the intermediate DataFrame for the author works by year
+def format_df_author_works(df):
+    # 1. Replace the NaN values with 0
+    df_authors_works = df.fillna(0)
+    # 2. Sum the columns of works by each individual year
+    columns_to_sum = ['y2025', 'y2024', 'y2023', 'y2022', 'y2021', 'y2020', 'y2019', 'y2018', 'y2017', 'y2016', 'y2015', 'y2014', 'y2013', 'y2012']
+    df_authors_works['works_2012_2025'] = df_authors_works[columns_to_sum].sum(axis=1)
+    # 3. Get the ID of the author without the URL component
+    df_authors_works['PersonId'] = df_authors_works['author_id_API'].apply(lambda x: x.split('/')[-1])
+    # 4. Rename column for the final df
+    df_authors_works.rename(columns = {'author_display_name':'author_API_name'}, inplace = True)
+    # 5. Select the columns to keep
+    sel_columns = ['PersonId','works_2012_2025','y2025','y2024','y2023','y2022','y2021','y2020','y2019','y2018','y2017','y2016','y2015','y2014','y2013','y2012','author_API_name']
+    df_authors_works = df_authors_works[sel_columns]
+    # 6. Drop duplicates
+    df_authors_works = df_authors_works.drop_duplicates()
+    # 7. Return the DataFrame
+    return df_authors_works
+
+# Fn29: gen_author_works_by_institution = Generate the authors works by year for a given institution
+def gen_author_works_by_institution(wd_path,uni_name,file_name,data_source):
+    # 1. Open the data source Berhard of Caltech Manual 
+    if data_source == "Bernhard":
+        file_path = wd_path + "\\data\\raw\\open_alex\\openalex_cleaned_names_all_affs.csv"
+        df_authors_new = pd.read_csv(file_path) # Data provided by Bernhard
+    elif data_source == "Caltech":
+        file_path_caltech1 = wd_path + "\\data\\raw\\open_alex\\openalex_caltech_authors_final.csv"
+        file_path_caltech2 = wd_path + "\\data\\raw\\open_alex\\openalex_caletch_authors_final_affs2and3.csv"
+        caltech1 = pd.read_csv(file_path_caltech1)
+        caltech2 = pd.read_csv(file_path_caltech2)
+        df_authors_new = format_caltech_raw_authors_dfs(caltech1,caltech2)
     # 2. Open the university dictionary
     file_path = wd_path + "\\data\\raw\\open_alex\\Final_sample_AARC_IPEDS_filtered_with_id.csv"
     df_dictionary = pd.read_csv(file_path) # University dictionary
@@ -631,14 +675,7 @@ def gen_author_works_by_institution(wd_path,uni_name,file_name):
     # 5. Open the authors works by year DataFrame
     file_path = wd_path + "\\data\\raw\\open_alex\\openalex_authors_works_by_years.csv"
     df_authors_works = pd.read_csv(file_path)
-    df_authors_works = df_authors_works.fillna(0)
-    columns_to_sum = ['y2025', 'y2024', 'y2023', 'y2022', 'y2021', 'y2020', 'y2019', 'y2018', 'y2017', 'y2016', 'y2015', 'y2014', 'y2013', 'y2012']
-    df_authors_works['works_2012_2025'] = df_authors_works[columns_to_sum].sum(axis=1)
-    df_authors_works['PersonId'] = df_authors_works['author_id_API'].apply(lambda x: x.split('/')[-1])
-    df_authors_works.rename(columns = {'author_display_name':'author_API_name'}, inplace = True)
-    sel_columns = ['PersonId','works_2012_2025','y2025','y2024','y2023','y2022','y2021','y2020','y2019','y2018','y2017','y2016','y2015','y2014','y2013','y2012','author_API_name']
-    df_authors_works = df_authors_works[sel_columns]
-    df_authors_works = df_authors_works.drop_duplicates()
+    df_authors_works = format_df_author_works(df_authors_works)
     # 6. Merge with the University specific authors
     df_authors_uni_works = pd.merge(df_authors_uni, df_authors_works, on = "PersonId", how = "left")
     # 7. Test if there are still authors to query
@@ -652,6 +689,39 @@ def gen_author_works_by_institution(wd_path,uni_name,file_name):
     df_authors_uni_works.to_csv("data\\raw\\open_alex\\openalex_"+file_name+"_authors_works_by_years.csv", index = False)
     print("The DataFrame has been saved successfully")
     return df_authors_uni_works
+
+# Fn30: caltech_affs_matched_row = Intermediate function to see which of the affiliation matched with caltech
+def caltech_affs_matched_row(row):
+    if row['affiliation_used_for_merge'] == 2:
+        return row['institution_display_name2']
+    elif row['affiliation_used_for_merge'] == 3:
+        return row['institution_display_name3']
+    else:
+        return row['institution_display_name1']
+
+# Fn31: format_caltech_raw_authors_dfs = Format the raw authors DataFrames for Caltech
+def format_caltech_raw_authors_dfs(caltech1,caltech2):
+    # 1. Format caltech1
+    sel_cols1 = ['PersonId','author_display_name','institution_display_name','works_count','cited_by_count','aarc_id','ipeds_id'] # Set the columns to keep
+    caltech1 = caltech1[sel_cols1] # Filter the columns
+    caltech1.rename(columns = {'institution_display_name':'institution_name'}, inplace = True) # Renmae the affiliation name column
+    # 2. Format caltech2
+    sel_cols2 = ['PersonId','author_display_name','institution_display_name1','institution_display_name2',
+             'institution_display_name3','affiliation_used_for_merge','works_count','cited_by_count','aarc_id','ipeds_id']
+    caltech2 = caltech2[sel_cols2]
+    caltech2['institution_name'] = caltech2.apply(caltech_affs_matched_row, axis=1)
+    sel_cols2_new = ['PersonId','author_display_name','institution_name','works_count','cited_by_count','aarc_id','ipeds_id']
+    caltech2 = caltech2[sel_cols2_new]
+    # 3. Concatenate the two DataFrames
+    caltech = pd.concat([caltech1,caltech2], axis = 0)
+    caltech.rename(columns = {'PersonId':'PersonId_wf'}, inplace = True) # Renmae to create a new one
+    caltech['PersonId'] = caltech['PersonId_wf'].apply(lambda x: x.split('/')[-1])  # Extract the ID
+    # 4. Delete the temp col from caltech DataFrame
+    caltech.drop(columns=['PersonId_wf'], inplace=True)
+    # 5. Set PersonId as the first column
+    caltech = caltech[sel_cols2_new]
+    # 6. Return the DataFrame
+    return caltech
 
 
 # 1. Working directory
@@ -714,7 +784,7 @@ big_df.rename(columns = {'grid':'grid_id_string'}, inplace = True)
 
 # 7. Do a left-join to get the final DataFrame (The final dictionary)
 final_dictionary = pd.merge(dictionary_df, big_df, on = "grid_id_string", how = "left")
-final_dictionary.to_csv("data\\raw\\open_alex\\Final_sample_AARC_IPEDS_filtered_with_id.csv", index = False)
+#final_dictionary.to_csv("data\\raw\\open_alex\\Final_sample_AARC_IPEDS_filtered_with_id.csv", index = False)
 
 # 8. Start with the author filtering
 max_naffs_01, df_01 = open_and_do_minimal_cleaning(file_path_01, filter = False, filter_value = 1)
@@ -824,10 +894,10 @@ df_new_merged_final.drop(columns = ['duplicates_test'], inplace = True)
 # Batch size = 100,  Parallel Process: 14  seconds, Linear Process: 34  seconds
 # Batch size = 1000, Parallel Process: 142 seconds, Linear Process: 384 seconds (2.70 times slower)
 authors_works_df = gen_authors_ids_to_call(wd_path = wd_path, 
-                                           uni_name = 'Yale University',
-                                           source = "main" ) # Get the authors ids to call the API
+                                           uni_name = 'California Institute of Technology',
+                                           source = "secondary_caltech" ) # Get the authors ids to call the API
 authors_ids_batch = generate_id_batches(df = authors_works_df, batch_size = 1000) # Transform the DataFrame into batches
-num_batches = 9  # Set the number of batches to call the API (1 batch = 1000 authors)
+num_batches = 10  # Set the number of batches to call the API (1 batch = 1000 authors)
 for i in range(0,num_batches):             # Iterate over each batch
         print("Current batch: ", i)        # Print the current batch to the user
         authors_vec = authors_ids_batch[i] # Define the authors vector
@@ -839,26 +909,73 @@ for i in range(0,num_batches):             # Iterate over each batch
 x = gen_final_works_by_year_csv(wd_path = wd_path)
 
 # 14. Produce institution specific works by year DataFrame (replaced flow code with a fn)
-uni_df = gen_author_works_by_institution(wd_path = wd_path,uni_name = 'Princeton University', file_name = 'princeton')
+uni_df = gen_author_works_by_institution(wd_path = wd_path,uni_name = 'Princeton University', file_name = 'princeton',data_source="Bernhard")
 
+# 15. Generate the datasets for people whos first affiliation is Caltech
+    # 15.1 Open the ready to match authors from the first affiliation
+df_fauthor_us = pd.read_csv("data\\raw\\open_alex\\openalex_authors_ready_to_match_dict.csv")
+df_fauthor_us.rename(columns = {'id':'PersonId','display_name':'author_display_name','affiliation_id':'id'}, inplace = True)
+    # 15.2 Open the final dictionary and filter Caltech Only (ror: 05dxps055)
+final_dictionary_path = wd_path + "\\data\\raw\\open_alex\\Final_sample_AARC_IPEDS_filtered_with_id.csv"
+final_dictionary_df = pd.read_csv(final_dictionary_path)
+final_dictionary_df = final_dictionary_df[final_dictionary_df['ror'] == 'https://ror.org/05dxps055']
+    # 15.3 Merge the two DataFrames
+merge_df = pd.merge(df_fauthor_us, final_dictionary_df, on = "id", how = "left")
+    # 15.4 Filter only the authors that have a grid_id_string
+filtered_merge_df = merge_df[merge_df['grid_id_string'].notnull()]
+filtered_merge_df
+    # 15.5 Save the final dataset
+#filtered_merge_df.to_csv("data\\raw\\open_alex\\openalex_caltech_authors_final.csv", index = False)
 
+# 16. Generate the datasets for people whos second or third affiliation is Caltech
+    # 16.1 Open the ready to match authors from the second or third affiliation
+df_maffs_us = pd.read_csv("data\\raw\\open_alex\\openalex_authors_multaffs_ready_to_match_dict.csv")
+df_maffs_us.rename(columns = {'id':'PersonId','display_name':'author_display_name',
+            'affiliation_id1':'id1', 'affiliation_id2':'id2','affiliation_id3':'id3'}, inplace = True)
+    # 16.2 Open the final dictionary and filter Caltech Only (ror: 05dxps055)
+final_dictionary_path = wd_path + "\\data\\raw\\open_alex\\Final_sample_AARC_IPEDS_filtered_with_id.csv"
+final_dictionary_df = pd.read_csv(final_dictionary_path)
+final_dictionary_df = final_dictionary_df[final_dictionary_df['ror'] == 'https://ror.org/05dxps055']
+    # 16.3 Create an intermediate dictionaries to match affiliationid2 and 3 separately
+dict_aff1 = prepare_dict_for_temp_merge(df = final_dictionary_df.copy(),affs_num = 1)
+dict_aff2 = prepare_dict_for_temp_merge(df = final_dictionary_df.copy(),affs_num = 2)
+dict_aff3 = prepare_dict_for_temp_merge(df = final_dictionary_df.copy(),affs_num = 3)
+    # 16.5 Merge the first, affiliation and drop those who have matched (they are already in the first dataset)
+df_new_merged = pd.merge(df_maffs_us.copy(), dict_aff1, on = "id1", how = "left")
+df_new_merged = df_new_merged[df_new_merged['dummy_col_aff1'].isnull()]
+    # 16.7 Merge the second and third affiliation
+df_new_merged = pd.merge(df_new_merged.copy(), dict_aff2, on = "id2", how = "left")
+df_new_merged = pd.merge(df_new_merged.copy(), dict_aff3, on = "id3", how = "left")
+    # 16.7 Filter only those who have matched either at the second or third affiliation
+df_new_merged = df_new_merged[(df_new_merged['dummy_col_aff2'] == 1) | (df_new_merged['dummy_col_aff3'] == 1)]
+    # 16.8 Work with the affiliation 2 and 3 separately for the final merge
+df_new_merged_aff2 = df_new_merged[df_new_merged['dummy_col_aff2'] == 1] # Second affiliation was matched regardless of the third
+df_new_merged_aff3 = df_new_merged[(df_new_merged['dummy_col_aff3'] == 1) & (df_new_merged['dummy_col_aff2'].isnull())] # Third affiliation was matched but not the second
+df_new_merged.shape[0] == df_new_merged_aff2.shape[0] + df_new_merged_aff3.shape[0] # Simple test to check if the split was done correctly
+    # 16.9 Merge the final dictionary with each partitioned dataset
+final_dictionary_df.rename(columns = {'id':'id2'}, inplace = True)
+df_new_merged_aff2 = pd.merge(df_new_merged_aff2, final_dictionary_df, on = "id2", how = "left")
+df_new_merged_aff2['affiliation_used_for_merge'] = 2
+final_dictionary_df.rename(columns = {'id2':'id3'}, inplace = True)
+df_new_merged_aff3 = pd.merge(df_new_merged_aff3, final_dictionary_df, on = "id3", how = "left")
+df_new_merged_aff3['affiliation_used_for_merge'] = 3
+    # 16.10 Concatenate the two DataFrames 
+df_new_merged_final = pd.concat([df_new_merged_aff2,df_new_merged_aff3], axis = 0)
 
-############################ EXPERIMENTAL CODE ##########################
+# 17. Look for potential duplicates from the previous dataset first affiliation dataset, drop them and save the final dataset
+    # 12.1 Open the previous dataset
+prev_df = pd.read_csv("data\\raw\\open_alex\\openalex_caltech_authors_final.csv")
+prev_df = prev_df[['PersonId']]
+prev_df['duplicates_test'] = 1
+df_new_merged_final = pd.merge(df_new_merged_final, prev_df, on = "PersonId", how = "left")
+test_df = df_new_merged_final[df_new_merged_final['duplicates_test'].notnull()]
+test_df.shape[0] == 0 # Simple test to check if there are duplicates
+test_df.shape[0] # Number of duplicates
+    # 12.1 Drop the duplicates
+df_new_merged_final = df_new_merged_final[df_new_merged_final['duplicates_test'].isnull()]
+df_new_merged_final.drop(columns = ['duplicates_test'], inplace = True)
+    # 12.2 Save the final dataset
+#df_new_merged_final.to_csv("data\\raw\\open_alex\\openalex_caletch_authors_final_affs2and3.csv", index = False)
 
-
-### PENDING JOB: CLEAN AND FILTER THOSE GUYS THAT COME FROM CALTECH
-
-# 15. Generate the datasets for people from Caltech (requires paths01-paths06)
-# 15.1 Open the dataframes
-max_naffs_01, df_01 = open_and_do_minimal_cleaning(file_path_01, filter = True, filter_value = 1)
-df_01_us = extract_and_filter_affs_details(df_01)
-max_naffs_02, df_02 = open_and_do_minimal_cleaning(file_path_02, filter = True, filter_value = 1)
-df_02_us = extract_and_filter_affs_details(df_02)
-max_naffs_03, df_03 = open_and_do_minimal_cleaning(file_path_03, filter = True, filter_value = 1)
-df_03_us = extract_and_filter_affs_details(df_03)
-max_naffs_04, df_04 = open_and_do_minimal_cleaning(file_path_04, filter = True, filter_value = 1)
-df_04_us = extract_and_filter_affs_details(df_04)
-max_naffs_05, df_05 = open_and_do_minimal_cleaning(file_path_05, filter = True, filter_value = 1)
-df_05_us = extract_and_filter_affs_details(df_05)
-max_naffs_06, df_06 = open_and_do_minimal_cleaning(file_path_06, filter = True, filter_value = 1)
-df_06_us = extract_and_filter_affs_details(df_06)
+# 18. Produce the Caltech specific works by year DataFrame (the parameters in this case must remain fixed)
+uni_df = gen_author_works_by_institution(wd_path = wd_path,uni_name = 'California Institute of Technology', file_name = 'caltech',data_source="Caltech")
