@@ -1,0 +1,9 @@
+n.chuquimarcaarguello@hss24.qmul.ac.uk
+Match AARC & OpenAlex
+
+
+BusinessEconFacultyLists
+This list is a panel for authors, it follows them trough time at a year frequency.
+Good example --> YaleID: 368
+
+ n.chuquimarcaarguello@hss24.qmul.ac.uk

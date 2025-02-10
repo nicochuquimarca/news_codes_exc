@@ -766,7 +766,7 @@ combined_ids_df.drop_duplicates(subset='affiliation_id_red', keep='first', inpla
 # 4. Prepare the information of the institutions that will call the API
 ids_to_call_df = gen_ids_to_call(wd_path=wd_path)
 ids_batch = generate_id_batches(df=ids_to_call_df,batch_size=100)
-num_batches  = 100
+num_batches  = 30
 for i in range(0,num_batches):
         print("Current batch: ", i)
         id_vec = ids_batch[i]
@@ -785,6 +785,7 @@ big_df.rename(columns = {'grid':'grid_id_string'}, inplace = True)
 # 7. Do a left-join to get the final DataFrame (The final dictionary)
 final_dictionary = pd.merge(dictionary_df, big_df, on = "grid_id_string", how = "left")
 #final_dictionary.to_csv("data\\raw\\open_alex\\Final_sample_AARC_IPEDS_filtered_with_id.csv", index = False)
+#final_dictionary.to_csv("data\\raw\\aarc_openalex_match\\input_files\\Final_sample_AARC_IPEDS_filtered_with_id.csv", index = False)
 
 # 8. Start with the author filtering
 max_naffs_01, df_01 = open_and_do_minimal_cleaning(file_path_01, filter = False, filter_value = 1)
