@@ -1,0 +1,12 @@
+Match AARC & OpenAlex
+
+BusinessEconFacultyLists
+This list is a panel for authors, it follows them trough time at a year frequency.
+Good example --> YaleID: 368
+
+Schools not listed in OpenAlex that have a parent institution
+InstitutionId	InstitutionName 		      ParentInstitutionId  ParentInstitutionName
+369	Rutgers - Newark                         ---> 177                  Rutgers, The State University of New Jersey			
+235	University of Texas-Pan American, The    ---> 557985               The University of Texas Rio Grande Valley
+539130	University of Texas at Brownsville, The  ---> 557985               The University of Texas Rio Grande Valley
+537408	Rutgers University-Camden	         ---> 177                  Rutgers, The State University of New Jersey
