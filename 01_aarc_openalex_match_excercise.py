@@ -7,20 +7,22 @@
 # version 2.1: 2025-02-11: Get the authors openalex ids and names
 # version 2.2: 2025-02-12: Get the authors openalex ids and names (continuation)
 # version 3.1: 2025-02-12: Start an doi-author_name match exercise
+# version 3.2: 2025-02-15: Continue with the doi-author_name match exercise(handle the duplicates)
+# version 3.3: 2025-02-17: Continue with the doi-author_name match exercise (do the match for one author papers)
 
 # Function List
-# Fn01: format_dictionary = Format the institution dictionary to merge with the faculty list
+# Fn01: format_dictionary                   = Format the institution dictionary to merge with the faculty list
 # Fn02: check_duplicates_and_missing_values = Check for duplicates and missing values in the merge
-# Fn03: format_faculty = Replace Institutions without an OpenAlexId with the OpenAlexId of the parent institution
-# Fn04: reorder_columns = Set a column in a specific position
-# Fn05: get_paper_authors = Get the authors openalex ids and names from a given paper
-# Fn06: process_paper_authors = Function that enable multiple workers to call the get_paper_authors function
-# Fn07: date_time_string = Get the current date and time in a string format
-# Fn08: linear_papers_authors = Linear process to get the authors of a list of papers
-# Fn09: parallel_papers_authors = Parallel process to get the authors of a list of papers
-# Fn10: gen_final_papers_authors_csv = Generate the aggregate papers authors csv
-# Fn11: gen_papers_doi_to_call = Generate the papers doi to call the API
-# Fn12: generate_scrap_batches = Divide the Dataframe into the scrap batches
+# Fn03: format_faculty                      = Replace Institutions without an OpenAlexId with the OpenAlexId of the parent institution
+# Fn04: reorder_columns                     = Set a column in a specific position
+# Fn05: get_paper_authors                   = Get the authors openalex ids and names from a given paper
+# Fn06: process_paper_authors               = Function that enables multiple workers to call the get_paper_authors function
+# Fn07: date_time_string                    = Get the current date and time in a string format
+# Fn08: linear_papers_authors               = Linear process to get the authors of a list of papers
+# Fn09: parallel_papers_authors             = Parallel process to get the authors of a list of papers
+# Fn10: gen_final_papers_authors_csv        = Generate the aggregate papers authors csv
+# Fn11: gen_papers_doi_to_call              = Generate the papers doi to call the API
+# Fn12: generate_scrap_batches              = Divide the Dataframe into the scrap batches
 
 # Pseudo Code
 # 1. Set Working directory
@@ -28,13 +30,13 @@
 # 3. Get the OpenAlex PaperId and AuthorId from a list of papers using the doi code 
 # 4. Start a doi-author_name match exercise
 
-
 # 0. Packages
 import os, pandas as pd, ast, requests, math   # Import the regular packages
 from datetime import date                      # Get the current date
 from datetime import datetime                  # Get the current date and time
-import concurrent.futures                      # For parallel processing
+import concurrent.futures, string              # For parallel processing
 import time                                    # For time measurement
+from unidecode import unidecode                # For string manipulation
 
 # Fn01: format_dictionary = Format the institution dictionary to merge with the faculty list
 def format_dictionary(df,format_type):
@@ -259,7 +261,10 @@ def gen_final_papers_authors_csv(wd_path):
           dfs.append(df)
     # 4. Concatenate all DataFrames in the list into a single DataFrame
     final_df = pd.concat(dfs, ignore_index=True)
-    # 5. Save the final DataFrame
+    # 5. Delete the paper_author_position and delete duplicates in general
+    final_df = final_df.drop(columns = ['paper_author_position'])
+    final_df = final_df.drop_duplicates()
+    # 6. Save the final DataFrame
     final_file_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\doi_papers_authors_openalex.csv"
     final_df.to_csv(final_file_path, index = False)
     print("The final institutions information has been saved successfully")
@@ -313,12 +318,164 @@ def generate_id_batches(df,batch_size):
     
     return id_vector_list
 
+# Fn13: format_authors_names = Format the author names previous to match by doi-author_name
+def format_authors_names(df,var_name):
+    # S1. Split the 'author_display_name' column into multiple columns
+    names_split = df[var_name].str.split(' ', expand=True)
+    # S2. Convert all strings in the split columns to uppercase
+    names_split = names_split.apply(lambda x: x.str.upper())
+    # S3. Remove all punctuation points from the strings
+    names_split = names_split.apply(lambda x: x.str.replace(f"[{string.punctuation}]", "", regex=True))
+    # S.4 Rename the new columns
+    num_cols = names_split.shape[1]
+    names_split.columns = [f'{var_name}_{i+1}' for i in range(num_cols)] 
+    print(f'The max. number of name components in this dataset is {num_cols} components')
+    # S.5 Count the number of non-None values in each row
+    names_split[f'{var_name}_tot'] = names_split.notna().sum(axis=1)
+    # S.6 Concatenate the new columns with the original DataFrame
+    df = pd.concat([df, names_split], axis=1)
+    # S.8 Return the formatted DataFrame
+    return df
+
+# Fn14. prepare_names_for_merge = Prepare the names for the merge, based on the number of components
+def prepare_names_for_merge(df,type_df,var_name,num_c,format_doi=False):
+    # S1. Filter by number of components
+    df = df[df[f'{var_name}_tot']==num_c]
+    # S2. Rename the doi column if specified by the user
+    if format_doi == True:
+        df.rename(columns = {'paper_doi':'doi'}, inplace = True)
+    # S2. Concatenate the name components into a single string
+    #     Is done manually due to the nature of the datasets (first df is surname-name and second df is name-surname)
+    # S2.1 Two components and original dataset
+    if num_c == 2 and type_df == 'original':
+        df['key'] = df['doi'] + '-' + df[f'{var_name}_1'] + '-' + df[f'{var_name}_2']
+    elif num_c == 2 and type_df == 'openalex':
+        df['key'] = df['doi'] + '-' + df[f'{var_name}_2'] + '-' + df[f'{var_name}_1']
+
+    # S3. Select the columns to return
+    if type_df == 'original':
+        sel_cols = ['key','doi','aarc_personid','aarc_name']
+        df       = df[sel_cols]
+        df['aarc_personid'] = df['aarc_personid'].astype(str)
+    elif type_df == 'openalex':
+        sel_cols = ['key','doi','author_id','author_display_name','paper_raw_author_name','paper_num_authors']
+        df       = df[sel_cols]
+        df['paper_num_authors'] = df['paper_num_authors'].astype(str)
+ 
+    # S.4 Remove accents from the strings
+    df = df.applymap(unidecode)
+    
+    # S.5 Remove duplicated keys
+    df['key_count'] = df.groupby('key')['key'].transform('count')
+    keys_count = df['key_count'].unique()
+    print(f'The unique key counts are: {keys_count}, I delete all the keys with more than one count')
+    df = df[df['key_count'] == 1]
+    df = df.drop(columns=['key_count'])
+
+    # S.6 Return the formatted DataFrame
+    return df
+
+# Fn15: merge_and_save_dfs = Merge the original and open Alex DataFrames and save the matches
+def merge_and_save_dfs(df1,df2,num_components):
+    # S.1 Merge the dataframes
+    df = pd.merge(df1, df2, on = 'key', how = 'left')
+    # S.2 Filter the matches only
+    df = df[df['author_id'].notnull()]
+    # S.3 See how many matches were found
+    num_matches = df.shape[0]
+    assert num_matches > 0, "Error: No matches were found, please check the data"
+    print(f'The number of matches found is {num_matches}')
+    # S.3 Save the DataFrame
+    path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\aarc_openalex_authors_matches\\aarc_oa_authors_matches_name_components_" + num_components + ".csv" 
+    df.to_csv(path, index = False)
+    print("Papers information has been saved succesfully")
+    # S.4 Return the DataFrame
+    return df
+
+# Fn16: get_authors_surnames(df) = Get the surnames of the authors
+def filter_df_and_test_surnames(df):
+    # 1. Get relevant columns and remove duplicates
+    df.rename(columns = {'aarc_personid':'PersonId','aarc_name':'PersonName',
+                          'author_id':'PersonOpenAlexId','author_display_name':'PersonOpenAlexName'}, inplace = True)
+    df = df[['PersonId','PersonName','PersonOpenAlexId','PersonOpenAlexName']]
+    df = df.drop_duplicates()
+    # 2. Get the surnames
+    df = format_authors_names(df = df, var_name ='PersonName') # Split the names in pieces
+    df.rename(columns = {'PersonName_1':'PersonSurname'}, inplace = True) # Rename the column that contains the surname
+    df = format_authors_names(df = df, var_name ='PersonOpenAlexName') # Split the names in pieces
+    df['PersonSurnameOpenAlex'] = df.apply(
+        lambda row: row[f'PersonOpenAlexName_{row["PersonOpenAlexName_tot"]}'], axis=1) # Get the surname from the OpenAlex data
+    df = df[['PersonId','PersonName','PersonOpenAlexId','PersonOpenAlexName','PersonSurname','PersonSurnameOpenAlex']] # Select only relevant columns
+    df['PersonSurnameOpenAlex'] = df['PersonSurnameOpenAlex'].apply(unidecode) # Remove accents
+    df['PersonSurnameOpenAlex'] = df['PersonSurnameOpenAlex'].str.replace('-', '') # Remove hyphens
+    df['SurnameMatch'] = df['PersonSurname'] == df['PersonSurnameOpenAlex']
+    # 3. Return the DataFrame
+    return df
+
+# Fn17: gen_final_aarc_openalex_authors_dictionary = Generate the final aarc openalex authors file and the authors dictionary
+def gen_final_aarc_openalex_authors_dictionary(wd_path):
+    folder_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\aarc_openalex_authors_matches"
+    files_vector = os.listdir(folder_path) # Get all the files in the folder
+    # 2. Initialize an empty list to store DataFrames
+    dfs = []
+    # 3. Iterate over each file in the directory
+    for file in files_vector:
+        if file.endswith('.csv'):
+            file_path = os.path.join(folder_path, file) # Get the file path
+            df = pd.read_csv(file_path)
+            dfs.append(df)
+    # 4. Concatenate all DataFrames in the list into a single DataFrame
+    matches_df = pd.concat(dfs, ignore_index=True)
+    # 5. Clean the matches DataFrame (select columns, and convert to strings)
+    matches_df = matches_df[['PersonId', 'PersonName', 'PersonOpenAlexId', 'PersonOpenAlexName']]
+    matches_df['PersonId'] = matches_df['PersonId'].astype(str)
+    # 6. Save the DataFrame
+    matches_file_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\aarc_openalex_authors_matches_final.csv"
+    matches_df.to_csv(matches_file_path, index = False)
+    print("The final institutions information has been saved successfully")
+    # Now we will create a dictionary that tells me the authors that have been and have not been matched
+    # 7. Open the FacultyList
+    fp = wd_path + "\\data\\raw\\aarc_openalex_match\\output_files\\BusinessEconFacultyLists_OpenAlexIds.csv"
+    df = pd.read_csv(fp)
+    df = df[['PersonId','PersonName']]
+    df.drop_duplicates(inplace = True)
+    df['PersonId'] = df['PersonId'].astype(str)
+    # 8. Remove PersonName to avoid _x and _y columns
+    matches_df = matches_df[['PersonId','PersonOpenAlexId', 'PersonOpenAlexName']]
+    # 9. Merge the two DataFrames
+    df2 = pd.merge(df, matches_df, on = 'PersonId', how = 'left')
+    df2['matched'] = df2['PersonOpenAlexId'].notnull()
+    # 10. Save the final DataFrame
+    file_path = wd_path + "\\data\\raw\\aarc_openalex_match\\output_files\\aarc_openalex_author_dictionary.xlsx"
+    df2.to_excel(file_path, index = False)
+    print("The author dictionary has been saved successfully")
+    # 11. Return the final DataFrame
+    return df2
+
+# Fn18: get_pending_authors = Get the authors that have not been matched from previous iterations
+def get_pending_authors(wd_path,df):
+    # 1. Open the final dictionary
+    fp = wd_path + "\\data\\raw\\aarc_openalex_match\\output_files\\aarc_openalex_author_dictionary.xlsx"
+    ddf = pd.read_excel(fp)
+    ddf = ddf[['PersonId','matched']]
+    ddf = ddf.drop_duplicates()
+    # 2. Do a merge with the two_author_papers_id_df
+    ddf['PersonId'] = ddf['PersonId'].astype(str)
+    df['PersonId'] = df['PersonId'].astype(str)   
+    df2 = pd.merge(df, ddf, on = 'PersonId', how = 'left')
+    # 3. Filter observations that meet the condition 'matched' == False
+    df2 = df2[df2['matched']==False]
+    df2 = df2.drop(columns = ['matched'])
+    # 4. Return the final DataFrame|
+    return df2
+
 
 # 1. Set Working directory
 wd_path = "C:\\Users\\nicoc\\Dropbox\\Pre_OneDrive_USFQ\\PCNICOLAS_HP_PAVILION\\Masters\\Applications2023\\EconMasters\\QMUL\\QMUL_Bursary"
 os.chdir(wd_path)
 pd.set_option('display.max_columns', None)
 
+# This should be the last step after the author dictionary is completed
 # 2. Merge Institution Dictionary and BusinessEconFaculty to get the OpenAlexId for the workplace and degree institution of the author
     # 2.1 Open the Dictionary and BusinessEconFaculty files
 folder_path   = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\"
@@ -364,37 +521,156 @@ for i in range(0,num_batches):             # Iterate over each batch
     # 2.3 Save the final dataframe
 z = gen_final_papers_authors_csv(wd_path = wd_path)
 
+# 4. Doi-author_name match exercise
+# 4.1 Original data
+fp   = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\AARC_people_DOI.xlsx"
+df1 = pd.read_excel(fp)
+df1 = df1[['aarc_personid','doi','aarc_name']]
+df1 = df1.drop_duplicates()
+# 4.2 OpenAlex data
+fp   = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\doi_papers_authors_openalex.csv"
+df2 = pd.read_csv(fp)
+df2 = df2[df2['api_found']=="Yes"] # Filter only papers with information
+df2 = df2[['paper_doi','paper_num_authors']] # Select the most basic columns
+df2 = df2.drop_duplicates()
+# 4.3 Merge and create the inputs for each iteration
+df3 = pd.merge(df1, df2, left_on = 'doi', right_on = 'paper_doi', how = 'left')
+# 4.4 Create multiple DataFrames using the number of authors in the papers
+one_author_papers_df   = df3[df3['paper_num_authors']==1] # Iteration 1
+two_author_papers_df   = df3[df3['paper_num_authors']==2] # Iteration 2
+three_author_papers_df = df3[df3['paper_num_authors']==3] # Iteration 3
+four_author_papers_df  = df3[df3['paper_num_authors']==4] # Iteration 4
+five_author_papers_df  = df3[df3['paper_num_authors']==5] # Iteration 5
+six_author_papers_df   = df3[df3['paper_num_authors']==6] # Iteration 6
+# 4.5 Open the OpenAlex data again and get the author information
+fp   = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\doi_papers_authors_openalex.csv"
+df2 = pd.read_csv(fp)
+df2 = df2[['paper_doi','author_id','author_display_name','paper_raw_author_name']] 
+df2 = df2.drop_duplicates()
+# 4.6 Start the iterations
+    # 4.6.1 Iteration 1: Papers with one author only (one_author_papers_df)
+        # Step1: Merge by doi to get the authors information    
+one_author_papers_id_df = pd.merge(one_author_papers_df, df2, on = 'paper_doi', how = 'left')
+        # Step 2. Select columns, test the surnames of the authors and save only those who match
+one_author_papers_id_df = filter_df_and_test_surnames(one_author_papers_id_df)
+one_author_papers_id_match_df   = one_author_papers_id_df[one_author_papers_id_df['SurnameMatch']==True]
+one_author_papers_id_nomatch_df = one_author_papers_id_df[one_author_papers_id_df['SurnameMatch']==False]
+file_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\aarc_openalex_authors_matches\\iter_1_author_match.csv"
+one_author_papers_id_match_df.to_csv(file_path, index = False)  
+        # Step 3. Generate the final file
+x = gen_final_aarc_openalex_authors_dictionary(wd_path = wd_path)
+    # 4.6.2 Iteration 2: Papers with two authors (removing the ones that have been matched in the previous iteration)
+        # Step1: Merge by doi to get the authors information    
+two_author_papers_id_df = pd.merge(two_author_papers_df, df2, on = 'paper_doi', how = 'left')
+        # Step 2. Select columns, test the surnames of the authors and save only those who match
+two_author_papers_id_df = filter_df_and_test_surnames(two_author_papers_id_df)
+        # Step 3. Get the authors that have not been matched from previous iterations
+two_author_papers_id_df = get_pending_authors(wd_path = wd_path, df = two_author_papers_id_df)
+        # Step 4. Save only those who match (remove duplicates before saving)
+two_author_papers_id_match_df   = two_author_papers_id_df[two_author_papers_id_df['SurnameMatch']==True]
+two_author_papers_id_nomatch_df = two_author_papers_id_df[two_author_papers_id_df['SurnameMatch']==False]
+two_author_papers_id_match_df   = two_author_papers_id_match_df.drop_duplicates()
+file_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\aarc_openalex_authors_matches\\iter_2_author_match.csv"
+two_author_papers_id_match_df.to_csv(file_path, index = False)  
+        # Step 5. Generate the final file
+x = gen_final_aarc_openalex_authors_dictionary(wd_path = wd_path)
+    # 4.6.3 Iteration 3: Papers with three authors (removing the ones that have been matched in the previous iterations)
+        # Step1: Merge by doi to get the authors information    
+three_author_papers_id_df = pd.merge(three_author_papers_df, df2, on = 'paper_doi', how = 'left')
+        # Step 2. Select columns, test the surnames of the authors and save only those who match
+three_author_papers_id_df = filter_df_and_test_surnames(three_author_papers_id_df)
+        # Step 3. Get the authors that have not been matched from previous iterations
+three_author_papers_id_df = get_pending_authors(wd_path = wd_path, df = three_author_papers_id_df)
+        # Step 4. Save only those who match (remove duplicates before saving)
+three_author_papers_id_match_df   = three_author_papers_id_df[three_author_papers_id_df['SurnameMatch']==True]
+three_author_papers_id_nomatch_df = three_author_papers_id_df[three_author_papers_id_df['SurnameMatch']==False]
+three_author_papers_id_match_df   = three_author_papers_id_match_df.drop_duplicates()
+file_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\aarc_openalex_authors_matches\\iter_3_author_match.csv"
+three_author_papers_id_match_df.to_csv(file_path, index = False)  
+        # Step 5. Generate the final file
+x = gen_final_aarc_openalex_authors_dictionary(wd_path = wd_path)
+    # 4.6.4 Iteration 4: Papers with four authors (removing the ones that have been matched in the previous iterations)
+        # Step1: Merge by doi to get the authors information
+four_author_papers_id_df = pd.merge(four_author_papers_df, df2, on = 'paper_doi', how = 'left')
+        # Step 2. Select columns, test the surnames of the authors and save only those who match
+four_author_papers_id_df = filter_df_and_test_surnames(four_author_papers_id_df)
+        # Step 3. Get the authors that have not been matched from previous iterations
+four_author_papers_id_df = get_pending_authors(wd_path = wd_path, df = four_author_papers_id_df)
+        # Step 4. Save only those who match (remove duplicates before saving)
+four_author_papers_id_match_df   = four_author_papers_id_df[four_author_papers_id_df['SurnameMatch']==True]
+four_author_papers_id_nomatch_df = four_author_papers_id_df[four_author_papers_id_df['SurnameMatch']==False]
+four_author_papers_id_match_df   = four_author_papers_id_match_df.drop_duplicates()
+file_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\aarc_openalex_authors_matches\\iter_4_author_match.csv"
+four_author_papers_id_match_df.to_csv(file_path, index = False)  
+        # Step 5. Generate the final file
+x = gen_final_aarc_openalex_authors_dictionary(wd_path = wd_path)
 
-# 4. Start a doi-author_name match exercise
-    # 4.1 Get the papers with ids
-file_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\doi_papers_authors_openalex.csv"
-papers_authors_df = pd.read_csv(file_path)
-sel_cols = ['paper_id', 'paper_doi', 'paper_title', 'paper_num_authors']
-papers_authors_df = papers_authors_df[sel_cols]
-papers_authors_df = papers_authors_df.drop_duplicates() 
-    #  4.2 Rename a column for the merge
-papers_authors_df.rename(columns = {'paper_doi':'doi'}, inplace = True)
-    # 4.3 Get the original papers dataset
-file_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\AARC_people_DOI.xlsx"
-papers_df = pd.read_excel(file_path)
-    # 4.4 Merge the two datasets
-papers_authors_mdf = pd.merge(papers_df, papers_authors_df, on = "doi", how = "left")
-    # 4.5 Get the authors openalex ids and names
-papers_authors_valid_df = papers_authors_mdf[papers_authors_mdf['paper_id'].notnull()]
-papers_authors_invalid_df = papers_authors_mdf[papers_authors_mdf['paper_id'].isnull()]  
-    # 4.6 Measure the percentage of papers found by OpenAlex API
-total_papers_count      = papers_df.shape[0]   
-merged_papers_count     = papers_authors_valid_df.shape[0]
-non_merged_papers_count = papers_authors_invalid_df.shape[0]
-percentage_found = round((merged_papers_count/total_papers_count)*100,2)
-percentage_not_found = round((non_merged_papers_count/total_papers_count)*100,2)
-print("Percentage of obs found by OpenAlex API: ", percentage_found,"%")
-    # 4.7 Open the papers_authors again and work only with the paper_authors_valid_df
-file_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\doi_papers_authors_openalex.csv"
-papers_authors_complete_df = pd.read_csv(file_path)
-    # 4.8 Filter the dataframe for valid obs
-papers_authors_complete_df = papers_authors_complete_df[papers_authors_complete_df['api_found']=="Yes"]
-    # 4.9 Create a doi_author_name key to merge with the original dataset
-papers_authors_complete_df['doi_author_name'] = papers_authors_complete_df['paper_doi'] + "_" + papers_authors_complete_df['author_display_name']
+# 4.6.5 Iteration 5: Papers with five authors (removing the ones that have been matched in the previous iterations)
+        # Step1: Merge by doi to get the authors information
+five_author_papers_id_df = pd.merge(five_author_papers_df, df2, on = 'paper_doi', how = 'left')
+        # Step 2. Select columns, test the surnames of the authors and save only those who match
+five_author_papers_id_df = filter_df_and_test_surnames(five_author_papers_id_df)
+        # Step 3. Get the authors that have not been matched from previous iterations
+five_author_papers_id_df = get_pending_authors(wd_path = wd_path, df = five_author_papers_id_df)
+        # Step 4. Save only those who match (remove duplicates before saving)
+five_author_papers_id_match_df   = five_author_papers_id_df[five_author_papers_id_df['SurnameMatch']==True]
+five_author_papers_id_nomatch_df = five_author_papers_id_df[five_author_papers_id_df['SurnameMatch']==False]
+five_author_papers_id_match_df   = five_author_papers_id_match_df.drop_duplicates()
+file_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\aarc_openalex_authors_matches\\iter_5_author_match.csv"
+five_author_papers_id_match_df.to_csv(file_path, index = False)  
+        # Step 5. Generate the final file
+x = gen_final_aarc_openalex_authors_dictionary(wd_path = wd_path)
 
-papers_authors_complete_df
+
+
+
+# 4.6.6 Iteration 6: Papers with five authors (removing the ones that have been matched in the previous iterations)
+        # Step1: Merge by doi to get the authors information
+six_author_papers_id_df = pd.merge(six_author_papers_df, df2, on = 'paper_doi', how = 'left')
+        # Step 2. Select columns, test the surnames of the authors and save only those who match
+six_author_papers_id_df = filter_df_and_test_surnames(six_author_papers_id_df)
+        # Step 3. Get the authors that have not been matched from previous iterations
+six_author_papers_id_df = get_pending_authors(wd_path = wd_path, df = six_author_papers_id_df)
+        # Step 4. Save only those who match (remove duplicates before saving)
+six_author_papers_id_match_df   = six_author_papers_id_df[six_author_papers_id_df['SurnameMatch']==True]
+six_author_papers_id_nomatch_df = six_author_papers_id_df[six_author_papers_id_df['SurnameMatch']==False]
+six_author_papers_id_match_df   = six_author_papers_id_match_df.drop_duplicates()
+file_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\aarc_openalex_authors_matches\\iter_6_author_match.csv"
+six_author_papers_id_match_df.to_csv(file_path, index = False)  
+        # Step 5. Generate the final file
+x = gen_final_aarc_openalex_authors_dictionary(wd_path = wd_path)
+
+
+
+
+
+
+
+
+
+four_author_papers_df
+
+
+
+
+### PREVIOOOUS CODEEE
+# EE #####
+# 4. Doi-author_name match exercise
+    # 4.1 Open original dataframe, select the most basic columns, and format the names to see their components
+fp   = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\AARC_people_DOI.xlsx"
+o_df = pd.read_excel(fp)
+o_df = o_df[['aarc_personid','doi','aarc_name']]
+o_df = format_authors_names(df = o_df, var_name ='aarc_name')
+    # 4.2 Open the OpenAlex data, filter valid papers, select the most basic columns, and format the names to see their components
+fp   = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\doi_papers_authors_openalex.csv"
+a_df = pd.read_csv(fp)
+a_df = a_df[a_df['api_found']=="Yes"] # Filter only papers with information
+a_df = a_df[['paper_doi','paper_num_authors','author_id','author_display_name','paper_raw_author_name']] # Select the most basic columns
+a_df = format_authors_names(df = a_df, var_name ='author_display_name') # Format the author names
+    # 4.3 Prepare the names and do the merge case by case
+    # 4.3.1 Names with two components 
+o_2c_df  = prepare_names_for_merge(df = o_df, type_df = 'original', var_name = 'aarc_name', num_c = 2, format_doi = False)
+a_2c_df  = prepare_names_for_merge(df = a_df, type_df = 'openalex', var_name = 'author_display_name', num_c = 2, format_doi = True)
+oa_2c_df = merge_and_save_dfs(df1 = o_2c_df, df2 = a_2c_df, num_components = '2')
+    # 4.3.2 Names with three components (Contnue iterations)
+    # 4.4 Create a final author_id - aarc_personid match file
