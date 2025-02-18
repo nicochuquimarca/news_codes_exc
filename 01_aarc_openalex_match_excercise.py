@@ -271,15 +271,22 @@ def gen_final_papers_authors_csv(wd_path):
     return final_df
 
 # Fn11: gen_papers_doi_to_call = Generate the papers doi to call the API
-def gen_papers_doi_to_call(wd_path):
+def gen_papers_doi_to_call(wd_path,source):
     # S.1 Open the input data provided by Moqi
-    file_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\AARC_people_DOI.xlsx"
-    df_papers = pd.read_excel(file_path)
+    if source == "aarc":
+        file_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\AARC_people_DOI.xlsx"
+        df_papers = pd.read_excel(file_path)
+        # S.1.1 Select specific columns and remove duplicates
+        sel_cols  = ['doi']
+    elif source == "aarc_yusuf":
+        file_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\merged_AARC_DOI_Scopus_id_Yusuf.csv"
+        df_papers = pd.read_csv(file_path)
+        df_papers.rename(columns = {'DOI':'doi'}, inplace = True) # change the name to make it consistent with the next steps
     # S.1.1 Select specific columns and remove duplicates
     sel_cols  = ['doi']
     df_papers = df_papers[sel_cols]
     df_papers = df_papers.drop_duplicates()
-    
+
     # S.2 Open the already scrapped data
     file_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\doi_papers_authors_openalex.csv"
     df_papers_authors = pd.read_csv(file_path)
@@ -507,7 +514,7 @@ folder_path = wd_path + "\\data\\raw\\aarc_openalex_match\\output_files\\"
 # Time per batch: 178 seconds, 2 minutes and 58 seconds --> approx 3 minutes
 # Time to run all the 234 batches: 12 hours and 42 minutes
     # 2.1 Generate the papers to call
-papers_to_call = gen_papers_doi_to_call(wd_path)
+papers_to_call = gen_papers_doi_to_call(wd_path,source='aarc_yusuf') # Generate the papers to call
 papers_doi_batch =  generate_id_batches(df = papers_to_call, batch_size = 1000) # Transform the DataFrame into batches
 num_batches = 58  # Set the number of batches to call the API (1 batch = 1000 papers)
     # 2.2 Call the API to get the authors openalex ids and names
