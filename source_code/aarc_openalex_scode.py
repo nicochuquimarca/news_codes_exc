@@ -76,15 +76,18 @@ def format_dictionary(df,format_type):
         return None
 
 # Fn02: check_duplicates_and_missing_values = Check for duplicates and missing values in the merge
-def check_duplicates_and_missing_values(original_df,new_df,column_name):
+def check_duplicates_and_missing_values(original_df,new_df,column_name,check_missing_values = True):
     original_nrows = original_df.shape[0] 
     new_nrows      = new_df.shape[0] 
     assert original_nrows == new_nrows, "Error: There are duplicates in the merge"
-    # S2. Check for missing values in a specified column
-    missing_values = new_df[column_name].isnull().sum()
-    assert missing_values == 0, "Error: There are " + str(missing_values) + " missing values in the merge, please do some checks"
-    # S3. S1 and S2 are correct, print a message and return None
-    print("The merge is correct, there are no duplicates or missing values")
+    # S2. Check for missing values in a specified column (optional)
+    if check_missing_values == True:
+        missing_values = new_df[column_name].isnull().sum()
+        assert missing_values == 0, "Error: There are " + str(missing_values) + " missing values in the merge, please do some checks"
+        # S3. S1 and S2 are correct, print a message and return None
+        print("The merge is correct, there are no duplicates or missing values")
+    elif check_missing_values == False:
+        print("The merge is correct, there are no duplicates, missing values have not been checked")
     return None
 
 # Fn03: format_faculty = Replace Institutions without an OpenAlexId with the OpenAlexId of the parent institution
