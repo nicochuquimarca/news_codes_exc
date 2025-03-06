@@ -13,6 +13,8 @@
 # version 4.1: 2025-02-19: Send the functions to a source code file and perform the doi-author_name excercise iteratively within a function
 # version 5.1: 2025-02-21: Get the author basic information to do an OpenAlex duplicates excercise
 # version 6.1: 2025-02-23: Handle the duplicates and concatenate the manually searched OpenAlex authors
+# version 6.2: 2025-03-04: Connect to the 02_aarc_twitter_match_via_openalex.py file, clean the twitter data
+
 
 # Function List
 # Fn01: format_dictionary                          = Format the institution dictionary to merge with the faculty list
@@ -40,6 +42,14 @@
 # Fn23: format_author_df                           = Format the final df the get_works_by_year function produces
 # Fn24: gen_empty_author_df                        = Generate an empty DataFrame for authors that have no data (either not found by the API or deleted)
 # Fn25: get_works_by_year                          = Get the works by year for a given author_id
+# Fn26: process_author_id                          = Function that enable multiple workers to call the get_works_by_year function
+# Fn27: linear_works_by_year                       = Linear process to get the works by year for a list of authors
+# Fn28: parallel_works_by_year                     = Parallel process to get the works by year for a list of authors
+# Fn29: gen_final_works_by_year_csv                = Generate the final works by year DataFrame
+# Fn30: gen_authors_ids_to_call                    = Generate the authors ids to call the API
+# Fn31: gen_final_data_with_oa_ids                 = Generate the final data with the OpenAlex ids
+# Fn32: prepare_twitter_data                       = Prepare the twitter data for the twitter-openalex-aarc matching (1:1 matching)
+
 
 # 0. Packages in the source code file
 import sys, os, pandas as pd, ast, requests, math # Import the regular packages
@@ -888,3 +898,39 @@ def gen_final_data_with_oa_ids(wd_path,file_name):
     print("The file was saved in: ", file_path)
     return oa_authorid_inst_df
         
+# Fn32: prepare_twitter_data = Prepare the twitter data for the twitter-openalex-aarc matching (1:1 matching)
+def prepare_twitter_data(wd_path):
+    # 1. Load the twitter data
+    fp = wd_path + "\\data\\raw\\twitter_openalex\\input_files\\authors_tweeters_2024_02.csv"
+    t_df = pd.read_csv(fp)
+    
+    # 2. Clean the df and check for duplicates
+    t_df['OpenAlexId'] = t_df['author_id'].apply(lambda x: x.split('/')[-1]) # Extract the openalex id
+    # Database author notes:  'The "alternative" column indicates if the match was made with the primary name (0) or an alternate name (1).'
+    t_df.rename(columns={'tweeter_id': 'TwitterId'}, inplace=True) # The proper name is Twitter not Tweeter
+    t_df.rename(columns={'author_id': 'OpenAlexLink'}, inplace=True)
+    t_df['MatchingMethod'] = t_df['alternative'].apply(lambda x: 'primary name' if x == 0 else 'alternate name')
+    t_df = t_df.drop(columns=['alternative'])
+    t_df['TwitterId_dups'] = t_df['TwitterId'].map(t_df['TwitterId'].value_counts()) # Count the duplicates
+    
+    # 3. Divide the df into duplicates and non-duplicates (based on the TwitterId) and save the fuzzy data in a folder
+    t_df_dups   = t_df[t_df['TwitterId_dups'] > 1]  # Get the duplicates
+    t_df_ndups  = t_df[t_df['TwitterId_dups'] == 1] # Get the unique records
+    fp = wd_path + "\\data\\raw\\twitter_openalex\\input_files\\fuzzy_twitter_dfs\\authors_tweeters_2024_02_duplicated_twitter_ids.csv" 
+    t_df_dups.to_csv(fp, index=False)
+    print("The file with TwitterId duplicates has been successfully saved.")
+    
+    # 4. Make a sub-division of the df into duplicates and non-duplicates (based on the OpenAlexId) and save the fuzzy data in a folder
+    t_df_ndups['OpenAlexId_dups'] = t_df_ndups['OpenAlexId'].map(t_df_ndups['OpenAlexId'].value_counts()) # Count the duplicates
+    t_df_ndups_oa_dups            = t_df_ndups[t_df_ndups['OpenAlexId_dups'] >  1] # Get the duplicates
+    t_df_ndups_oa_ndups           = t_df_ndups[t_df_ndups['OpenAlexId_dups'] == 1] # Get the unique values
+    fp = wd_path + "\\data\\raw\\twitter_openalex\\input_files\\fuzzy_twitter_dfs\\authors_tweeters_2024_02_duplicated_openalex_ids.csv" 
+    t_df_ndups_oa_dups.to_csv(fp, index=False)
+    print("The file with OpenAlexId duplicates has been successfully saved.")
+   
+    # 5. Save and return the clean df (1:1 between Twitter and OpenAlexIds)
+    t_df_ndups_oa_ndups = t_df_ndups_oa_ndups.drop(columns=['TwitterId_dups', 'OpenAlexId_dups']) # Drop the columns with the duplicates counters
+    fp = wd_path + "\\data\\raw\\twitter_openalex\\input_files\\authors_tweeters_2024_02_clean.csv"
+    t_df_ndups_oa_ndups.to_csv(fp, index=False)
+    print("The clean 1:1 dataset has been successfully saved.")
+    return t_df_ndups_oa_ndups
