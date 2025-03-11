@@ -13,7 +13,8 @@
 # version 4.1: 2025-02-19: Send the functions to a source code file and perform the doi-author_name excercise iteratively within a function
 # version 5.1: 2025-02-21: Get the author basic information to do an OpenAlex duplicates excercise
 # version 6.1: 2025-02-23: Handle the duplicates and concatenate the manually searched OpenAlex authors
-# version 6.2: 2025-03-04: Connect to the 02_aarc_twitter_match_via_openalex.py file, clean the twitter data
+# version 6.3: 2025-02-25: Create a global match between the AARC and OpenAlex authors
+# version 6.4: 2025-03-06: Connect to the 02_aarc_twitter_match_via_openalex.py file, clean the twitter data
 
 
 # Function List
@@ -489,14 +490,15 @@ def gen_final_aarc_openalex_authors_dictionary(wd_path):
     df_names1 = df_names1[['PersonId','PersonName']]
     df_names1['PersonId'] = df_names1['PersonId'].astype(str)
     df_names1.drop_duplicates(inplace = True)
+    # 7.5 Handle some special cases that have a different name despite sharing the same PersonId
+    df_names1.loc[df_names1['PersonId'] == '115042', 'PersonName'] = 'WILCOXEN, PETER' # The other name was 'WILCOXEN, PETER J'
+    df_names1.loc[df_names1['PersonId'] == '115553', 'PersonName'] = 'PEARCE, DOUGLAS' # The other name was 'PEARCE, DOUGLAS K'
+    df_names1.loc[df_names1['PersonId'] == '200379', 'PersonName'] = 'MUNNELL, ALICIA' # The other name was 'MUNNELL, ALICIA H'
+    df_names1.drop_duplicates(inplace = True)
+    # 7.6 Concatenate the two DataFrames and delete duplicates
     df_names = pd.concat([df_names0,df_names1], axis = 0)
     df_names.drop_duplicates(inplace = True)
-    # 7.5 Handle some special cases that have a different name despite sharing the same PersonId
-    df_names.loc[df_names['PersonId'] == '115042', 'PersonName'] = 'WILCOXEN, PETER' # The other name was 'WILCOXEN, PETER J'
-    df_names.loc[df_names['PersonId'] == '115553', 'PersonName'] = 'PEARCE, DOUGLAS' # The other name was 'PEARCE, DOUGLAS K'
-    df_names.loc[df_names['PersonId'] == '200379', 'PersonName'] = 'MUNNELL, ALICIA' # The other name was 'MUNNELL, ALICIA H'
-    df_names.drop_duplicates(inplace = True)
-    # 7.6 Merge the ids with the names
+    # 7.7 Merge the ids with the names
     df = pd.merge(df_ids, df_names, on = 'PersonId', how = 'left')
     # 8. Remove PersonName to avoid _x and _y columns
     matches_df = matches_df[['PersonId','PersonOpenAlexId', 'PersonOpenAlexName']]
@@ -506,8 +508,14 @@ def gen_final_aarc_openalex_authors_dictionary(wd_path):
     # 10. Save the final DataFrame
     file_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\aarc_openalex_author_intermediate_dictionary.xlsx"
     df2.to_excel(file_path, index = False)
-    print("The 'aarc_open_alex_author_dictionary.xlsx' been saved successfully")
-    # 11. Return the final DataFrame
+    print("The 'aarc_openalex_author_intermediate_dictionary.xlsx' been saved successfully")
+    # 11. Create a Intermediate EconBusinessFaculty dictionary by re-using the dfnames1 df (df_names1--> Contains the econfaculty list, matches_df--> Contains the matches)
+    df3 = pd.merge(df_names1, matches_df, on = 'PersonId', how = 'left')
+    df3['matched'] = df3['PersonOpenAlexId'].notnull()
+    file_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\aarc_openalex_author_intermediate_businessecon_dictionary.xlsx"
+    df3.to_excel(file_path, index = False)
+    print("The 'aarc_openalex_author_intermediate_businessecon_dictionary.xlsx' been saved successfully")
+    # 12. Return the final DataFrame
     return df2
 
 # Fn18: get_pending_authors = Get the authors that have not been matched from previous iterations
@@ -560,8 +568,13 @@ def doi_author_surname_match_excercise(wd_path):
             os.remove(file)
         except FileNotFoundError:
             pass
-    # Delete the aarc_openalex_author_dictionary.xlsx and aarc_openalex_authors_matches.csv files since they are they are the final products created in each iteration
+    # Delete the aarc_openalex_author_dictionary.xlsx, aarc_openalex_author_intermediate_businessecon_dictionary.xlsx and aarc_openalex_authors_matches.csv files since they are they are the final products created in each iteration
     fp = wd_path + "\\data\\raw\\aarc_openalex_match\\output_files\\aarc_openalex_author_dictionary.xlsx"
+    try:
+        os.remove(fp) # Delete the file
+    except FileNotFoundError:
+        pass # If the file is not found, do nothing
+    fp = wd_path + "\\data\\raw\\aarc_openalex_match\\output_files\\aarc_openalex_author_intermediate_businessecon_dictionary.xlsx"
     try:
         os.remove(fp) # Delete the file
     except FileNotFoundError:
@@ -571,7 +584,8 @@ def doi_author_surname_match_excercise(wd_path):
         os.remove(fp) # Delete the file
     except FileNotFoundError:
         pass # If the file is not found, do nothing
-
+    
+    
     # Step 3: Start the matching exercise, the process will be done in iterations
     # 3.1 Iteration 1: Papers with one author only, it is outside of the loop because it is a special case
     iter1_df          = df3[df3['paper_num_authors']==1] # Papers with one author only
@@ -836,9 +850,14 @@ def gen_final_works_by_year_csv(wd_path):
     return final_df
 
 # Fn30: gen_authors_ids_to_call = Generate the authors ids to call the API
-def gen_authors_ids_to_call(wd_path):
-    file_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\aarc_openalex_author_intermediate_dictionary.xlsx"
+def gen_authors_ids_to_call(wd_path,dictionary_type):
+    # Open the intermediate dictionary (user dependent)
+    if dictionary_type == 'aarc_openalex_author_intermediate_dictionary':
+        file_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\aarc_openalex_author_intermediate_dictionary.xlsx"
+    elif dictionary_type == 'aarc_openalex_author_intermediate_businessecon_dictionary':
+        file_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\aarc_openalex_author_intermediate_businessecon_dictionary.xlsx"
     df_authors = pd.read_excel(file_path)
+    
     df_authors['PersonId_dups'] = df_authors['PersonId'].map(df_authors['PersonId'].value_counts())
     df_authors = df_authors[df_authors['PersonId_dups'] > 1]
     df_authors['author_id_API'] = "https://api.openalex.org/authors/" + df_authors['PersonOpenAlexId']
@@ -930,6 +949,7 @@ def prepare_twitter_data(wd_path):
    
     # 5. Save and return the clean df (1:1 between Twitter and OpenAlexIds)
     t_df_ndups_oa_ndups = t_df_ndups_oa_ndups.drop(columns=['TwitterId_dups', 'OpenAlexId_dups']) # Drop the columns with the duplicates counters
+    t_df_ndups_oa_ndups.rename(columns={'OpenAlexId': 'PersonOpenAlexId'}, inplace=True)
     fp = wd_path + "\\data\\raw\\twitter_openalex\\input_files\\authors_tweeters_2024_02_clean.csv"
     t_df_ndups_oa_ndups.to_csv(fp, index=False)
     print("The clean 1:1 dataset has been successfully saved.")
