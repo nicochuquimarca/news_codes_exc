@@ -15,6 +15,12 @@
 # version 6.1: 2025-02-23: Handle the duplicates and concatenate the manually searched OpenAlex authors
 # version 6.3: 2025-02-25: Create a global match between the AARC and OpenAlex authors
 # version 6.4: 2025-03-06: Connect to the 02_aarc_twitter_match_via_openalex.py file, clean the twitter data
+# version 6.5: 2025-03-10: Continue building the BusinessEcon Faculty dictionary
+# version 6.6: 2025-03-27: Continue with the BusinessEcon Faculty dictionary, but translate the merge to a function
+# version 7.1: 2025-03-31: See how many people from the DOI files were not matched by the first exercise
+# version 8.1: 2025-04-02: Get the OpenAlex information for the papers (title,date keywords, fields).
+# version 8.2: 2025-04-04: Continue with the OpenAlex information for the papers (title,date keywords, fields).
+# version 8.3: 2025-04-05: Continue with the OpenAlex information for the papers (title,date keywords, fields).
 
 
 # Function List
@@ -23,33 +29,37 @@
 # Fn03: format_faculty                             = Replace Institutions without an OpenAlexId with the OpenAlexId of the parent institution
 # Fn04: reorder_columns                            = Set a column in a specific position
 # Fn05: get_paper_authors                          = Get the authors openalex ids and names from a given paper
-# Fn06: process_paper_authors                      = Function that enables multiple workers to call the get_paper_authors function
-# Fn07: date_time_string                           = Get the current date and time in a string format
-# Fn08: linear_papers_authors                      = Linear process to get the authors of a list of papers
-# Fn09: parallel_papers_authors                    = Parallel process to get the authors of a list of papers
-# Fn10: gen_final_papers_authors_csv               = Generate the aggregate papers authors csv
-# Fn11: gen_papers_doi_to_call                     = Generate the papers doi to call the API
-# Fn12: generate_scrap_batches                     = Divide the Dataframe into the scrap batches
-# Fn13: format_authors_names                       = Format the author names previous to match by doi-author_name
-# Fn14. prepare_names_for_merge                    = Prepare the names for the merge, based on the number of components
-# Fn15: merge_and_save_dfs                         = Merge the original and open Alex DataFrames and save the matches
-# Fn16: get_authors_surnames(df)                   = Get the surnames of the authors
-# Fn17: gen_final_aarc_openalex_authors_dictionary = Generate the final aarc openalex authors file and the authors dictionary
-# Fn18: get_pending_authors                        = Get the authors that have not been matched from previous iterations
-# Fn19: doi_author_surname_match_excercise         = Get the OpenAlexId for the authors by matching surname within each paper (using the doi to match a paper with the authors)
-# Fn20: fill_na_ycols_to_the_left                  = Fill the missing years to the left when creating a DataFrame
-# Fn21: fill_na_ycols_to_the_right                 = Fill the missing years to the right when creating a DataFrame
-# Fn22: handle_missing_years                       = Handle the missing years in the years vector
-# Fn23: format_author_df                           = Format the final df the get_works_by_year function produces
-# Fn24: gen_empty_author_df                        = Generate an empty DataFrame for authors that have no data (either not found by the API or deleted)
-# Fn25: get_works_by_year                          = Get the works by year for a given author_id
-# Fn26: process_author_id                          = Function that enable multiple workers to call the get_works_by_year function
-# Fn27: linear_works_by_year                       = Linear process to get the works by year for a list of authors
-# Fn28: parallel_works_by_year                     = Parallel process to get the works by year for a list of authors
-# Fn29: gen_final_works_by_year_csv                = Generate the final works by year DataFrame
-# Fn30: gen_authors_ids_to_call                    = Generate the authors ids to call the API
-# Fn31: gen_final_data_with_oa_ids                 = Generate the final data with the OpenAlex ids
-# Fn32: prepare_twitter_data                       = Prepare the twitter data for the twitter-openalex-aarc matching (1:1 matching)
+# Fn06: get_paper_info                             = Get the metadata of a paper using the DOI
+# Fn07: process_paper_authors                      = Function that enables multiple workers to call the get_paper_authors function
+# Fn08: process_paper_info                         = Function that enable multiple workers to call the get_paper_info function
+# Fn09: date_time_string                           = Get the current date and time in a string format
+# Fn10: linear_papers_scraper                      = Linear process to get the paper data (authors or info) of a list of papers
+# Fn11: parallel_papers_scraper                    = Parallel process to get the paper data (authors or info) of a list of papers
+# Fn12: gen_final_papers_csv                       = Generate the aggregate papers data in a csv
+# Fn13: gen_papers_doi_to_call                     = Generate the papers doi to call the API
+# Fn14: generate_scrap_batches                     = Divide the Dataframe into the scrap batches
+# Fn15: format_authors_names                       = Format the author names previous to match by doi-author_name
+# Fn16. prepare_names_for_merge                    = Prepare the names for the merge, based on the number of components
+# Fn17: merge_and_save_dfs                         = Merge the original and open Alex DataFrames and save the matches
+# Fn18: get_authors_surnames                       = Get the surnames of the authors
+# Fn19: gen_final_aarc_openalex_authors_dictionary = Generate the final aarc openalex authors file and the authors dictionary
+# Fn20: get_pending_authors                        = Get the authors that have not been matched from previous iterations
+# Fn21: doi_author_surname_match_excercise         = Get the OpenAlexId for the authors by matching surname within each paper (using the doi to match a paper with the authors)
+# Fn22: fill_na_ycols_to_the_left                  = Fill the missing years to the left when creating a DataFrame
+# Fn23: fill_na_ycols_to_the_right                 = Fill the missing years to the right when creating a DataFrame
+# Fn24: handle_missing_years                       = Handle the missing years in the years vector
+# Fn25: format_author_df                           = Format the final df the get_works_by_year function produces
+# Fn26: gen_empty_author_df                        = Generate an empty DataFrame for authors that have no data (either not found by the API or deleted)
+# Fn27: get_works_by_year                          = Get the works by year for a given author_id
+# Fn28: process_author_id                          = Function that enable multiple workers to call the get_works_by_year function
+# Fn29: linear_works_by_year                       = Linear process to get the works by year for a list of authors
+# Fn30: parallel_works_by_year                     = Parallel process to get the works by year for a list of authors
+# Fn31: gen_final_works_by_year_csv                = Generate the final works by year DataFrame
+# Fn32: gen_authors_ids_to_call                    = Generate the authors ids to call the API
+# Fn33: gen_final_data_with_oa_ids                 = Generate the final data with the OpenAlex ids
+# Fn34: prepare_twitter_data                       = Prepare the twitter data for the twitter-openalex-aarc matching (1:1 matching)
+# Fn35 use_aux_df                                  = Use the auxiliary file to know which authors to keep from the duplicates df
+# Fn36 gen_aarc_openalex_dictionary                = Generate the AARC-OpenAlex dictionary depending on the type of dictionary (reduced vs full sample)
 
 
 # 0. Packages in the source code file
@@ -59,6 +69,8 @@ from datetime import datetime                     # Get the current date and tim
 import concurrent.futures, string                 # For parallel processing
 import glob, time                                 # To call elements in a folder and time measurement
 from unidecode import unidecode                   # For string manipulation
+import numpy as np                                # For numerical operations
+
 
 # Fn01: format_dictionary = Format the institution dictionary to merge with the faculty list
 def format_dictionary(df,format_type):
@@ -196,14 +208,153 @@ def get_paper_authors(doi):
         # S.5 Return the dataframe
         return df
 
-# Fn06: process_paper_authors = Function that enable multiple workers to call the get_paper_authors function
+# Fn06: get_paper_info = Get the metadata of a paper using the DOI
+def get_paper_info(doi):
+    #print("Getting the paper information for the DOI: ", doi)
+    # S.1 Call the API
+    doi_url = 'https://api.openalex.org/works/https://doi.org/' + doi
+    wapi_response = requests.get(doi_url)
+    
+    # S.2 Check if the response is successful
+    wapi_response_test = wapi_response.status_code
+    
+    if wapi_response_test != 200:
+        # If the response is not succesfull return an empty dataframe
+        api_found = 'No' # Create a variable to store if the api call was successful or not
+        df = pd.DataFrame({
+        'paper_id':    [None],
+        'paper_doi':   doi,
+        'paper_title': [None],
+        'paper_num_authors': [None],
+        'paper_author_position': [None],
+        'author_id': [None],
+        'author_display_name': [None],
+        'paper_raw_author_name': [None],
+        'api_found': api_found,
+        'issn_l': [None],
+        'issn': [None],
+        'journal_name': [None],
+        'journal_oa_id': [None],
+        'journal_volume': [None],
+        'journal_issue': [None],
+        'paper_fpage': [None],
+        'paper_lpage': [None],
+        'paper_retracted': [None],
+        'issn_vec': [None],
+        'paper_topics_vec': [None],
+        'paper_references_vec': [None]
+    })
+        return df
+    elif wapi_response_test == 200:
+        # If the response is succesfull continue with the extraction
+        api_found = 'Yes'
+        # S.3 Get the data
+        wapi_data   = wapi_response.json()
+        # S.3.1 Get article level relevant data (includes journal information)
+        num_authors = len(wapi_data['authorships']) # Get the number of authors
+        # S.3.1.1 Handle scenarios when the primary_location is empty
+        if wapi_data['primary_location']['source'] is None:
+            issn_l        = None
+            issn          = None
+            journal_name  = None
+            journal_oa_id = None
+            issn_vec      = None
+        elif wapi_data['primary_location']['source'] is not None:
+            issn_l = wapi_data['primary_location']['source']['issn_l']
+            issn = wapi_data['primary_location']['source']['issn']
+            journal_name = wapi_data['primary_location']['source']['display_name']
+            journal_oa_id = wapi_data['primary_location']['source']['id']
+            issn_vec = wapi_data['primary_location']['source']['issn']
+        # 3.1.2. Continue with the extraction of the data
+        journal_volume = wapi_data['biblio']['volume']
+        journal_issue = wapi_data['biblio']['issue']
+        paper_fpage = wapi_data['biblio']['first_page']
+        paper_lpage = wapi_data['biblio']['last_page']
+        paper_retracted = wapi_data['is_retracted']
+        paper_topics_vec = wapi_data['topics'] # Get the topics of the paper
+        paper_references_vec = wapi_data['referenced_works'] # Get the topics of the paper
+        
+        data = [] # Create a list to store the extracted data
+        # S.3.2 Handle scenarios when authorships is empty
+        if num_authors == 0:
+            data.append({
+                'paper_id': wapi_data['id'],
+                'paper_doi': doi,
+                'paper_title': wapi_data['title'],
+                'paper_num_authors': num_authors,
+                'paper_author_position': [None],
+                'author_id': [None],
+                'author_display_name': [None],
+                'paper_raw_author_name': [None],
+                'api_found': api_found,
+                'issn_l': issn_l,
+                'issn': issn,
+                'journal_name': journal_name,
+                'journal_oa_id': journal_oa_id,
+                'journal_volume': journal_volume,
+                'journal_issue': journal_issue,
+                'paper_fpage': paper_fpage,
+                'paper_lpage': paper_lpage,
+                'paper_retracted': paper_retracted,
+                'issn_vec': issn_vec,
+                'paper_topics_vec': paper_topics_vec,
+                'paper_references_vec': paper_references_vec
+            })
+            # Concatenate the extracted data into a dataframe
+            df = pd.DataFrame(data)
+        elif num_authors > 0:
+            # S.3.2 Extract the required information for each author
+            for authorship in wapi_data['authorships']:
+                data.append({
+                'paper_id': wapi_data['id'],
+                'paper_doi': doi,
+                'paper_title': wapi_data['title'],
+                'paper_num_authors': num_authors,
+                'paper_author_position': authorship['author_position'],
+                'author_id': authorship['author']['id'],
+                'author_display_name': authorship['author']['display_name'],
+                'paper_raw_author_name': authorship['raw_author_name'],
+                'api_found': api_found,
+                'issn_l': issn_l,
+                'issn': issn,
+                'journal_name': journal_name,
+                'journal_oa_id': journal_oa_id,
+                'journal_volume': journal_volume,
+                'journal_issue': journal_issue,
+                'paper_fpage': paper_fpage,
+                'paper_lpage': paper_lpage,
+                'paper_retracted': paper_retracted,
+                'issn_vec': issn_vec,
+                'paper_topics_vec': paper_topics_vec,
+                'paper_references_vec': paper_references_vec
+                })
+            # S.3.3 Concatenate the extracted data into a dataframe
+            df = pd.DataFrame(data)
+            df['author_id'] = df['author_id'].apply(lambda x: x.split('/')[-1]) # Format the author id only when it is not None
+        
+        # S.4 Format the Ids in the dataframe
+        df['paper_id'] = df['paper_id'].apply(lambda x: x.split('/')[-1])
+        # S.4.1 Format the journal id only when it is not None        
+        if journal_oa_id is not None:
+            df['journal_oa_id'] = df['journal_oa_id'].apply(lambda x: x.split('/')[-1])
+        # S.5 Return the dataframe
+        return df
+
+# Fn07: process_paper_authors = Function that enable multiple workers to call the get_paper_authors function
 def process_paper_authors(doi):
     # 3 workers --> time sleep = 0.05
     # 4 workers --> time sleep = 0.20
     time.sleep(0.06) # Introduce a small delay between requests
     return get_paper_authors(doi)
 
-# Fn07: date_time_string = Get the current date and time in a string format
+# Fn08: process_paper_info = Function that enable multiple workers to call the get_paper_info function
+def process_paper_info(doi):
+    # 3 workers --> time sleep = 0.05
+    # 4 workers --> time sleep = 0.20
+    time.sleep(0.06) # Introduce a small delay between requests
+    return get_paper_info(doi)
+
+# Fn09: date_time_string = Get the current date and time in a string format
 def date_time_string(current_time):
     year   = str(current_time.year)
     month  = str(current_time.month)
@@ -224,14 +375,17 @@ def date_time_string(current_time):
     date_string = year + "-" +  month + "-"  + day + "_" + hour + "." + minute + "." + second
     return date_string
 
-# Fn08: linear_papers_authors = Linear process to get the authors of a list of papers
-def linear_paper_authors(wd_path,doi_vec):
+# Fn10: linear_papers_scraper = Linear process to get the paper data (authors or info) of a list of papers
+def linear_paper_scraper(wd_path,doi_vec,scrap_fn):
     # Linear process
     papers_list = []
     # Iterate over the author_ids
     for current_iter, doi in enumerate(doi_vec, start=1):  # start=1 to start counting from 1
         # Get the df of the current id
-        df_paper = get_paper_authors(doi)
+        if scrap_fn == 'paper_authors':
+            df_paper = get_paper_authors(doi)
+        if scrap_fn == 'paper_info':
+            df_paper = get_paper_info(doi)
         # Append the df to the list
         papers_list.append(df_paper)
     # Concatenate the list of dataframes
@@ -240,36 +394,55 @@ def linear_paper_authors(wd_path,doi_vec):
     # Get the dates to save the files
     current_time = datetime.now()
     date_string  = date_time_string(current_time = current_time)
-    path = wd_path +"\\data\\raw\\aarc_openalex_match\\input_files\\doi_papers_authors\\doi_papers_authors_"+date_string+".csv"
+    if scrap_fn == 'paper_authors':
+        path = wd_path +"\\data\\raw\\aarc_openalex_match\\input_files\\doi_papers_authors\\doi_papers_authors_"+date_string+".csv"
+    if scrap_fn == 'paper_info':
+        path = wd_path +"\\data\\raw\\aarc_openalex_match\\input_files\\doi_papers_info\\doi_papers_info_"+date_string+".csv"
     linear_papers_df.to_csv(path, index = False)
     print("Papers information has been saved in the following path: ", path)
     # Return the DataFrame
     return linear_papers_df
 
-# Fn09: parallel_papers_authors = Parallel process to get the authors of a list of papers
-def parallel_paper_authors(wd_path,doi_vec):
+# Fn11: parallel_papers_scraper = Parallel process to get the paper data (authors or info) of a list of papers
+def parallel_paper_scraper(wd_path,doi_vec,scrap_fn):
     # Parallel process, limited to 3 workers due to API response constraints
     # Initialize an empty list to store the results
     papers_list = []
-    # Use ThreadPoolExecutor to parallelize the API requests
-    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
-        # Map the process_paper_authors function to the doi_vec
-        results = list(executor.map(process_paper_authors, doi_vec))
-    # Filter out None or empty DataFrames
-    papers_list = [df for df in results if df is not None and not df.empty]
+    
+    if scrap_fn == 'paper_authors':
+        # Use ThreadPoolExecutor to parallelize the API requests
+        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+            # Map the process_paper_authors function to the doi_vec
+            results = list(executor.map(process_paper_authors, doi_vec))
+        # Filter out None or empty DataFrames
+        papers_list = [df for df in results if df is not None and not df.empty]
+    elif scrap_fn == 'paper_info':
+        # Use ThreadPoolExecutor to parallelize the API requests
+        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+            # Map the process_paper_authors function to the doi_vec
+            results = list(executor.map(process_paper_info, doi_vec))
+        # Filter out None or empty DataFrames
+        papers_list = [df for df in results if df is not None and not df.empty]
     # Concatenate the list of dataframes
     parallel_papers_df = pd.concat(papers_list, axis=0)
     current_time = datetime.now()
     date_string  = date_time_string(current_time = current_time)
-    path = wd_path +"\\data\\raw\\aarc_openalex_match\\input_files\\doi_papers_authors\\doi_papers_authors_"+date_string+".csv"
+    if scrap_fn == 'paper_authors':
+        path = wd_path +"\\data\\raw\\aarc_openalex_match\\input_files\\doi_papers_authors\\doi_papers_authors_"+date_string+".csv"
+    if scrap_fn == 'paper_info':
+        path = wd_path +"\\data\\raw\\aarc_openalex_match\\input_files\\doi_papers_info\\doi_papers_info_"+date_string+".csv"
     parallel_papers_df.to_csv(path, index = False)
     print("Papers information has been saved in the following path: ", path)
     # Return the DataFrame
     return parallel_papers_df
 
-# Fn10: gen_final_papers_authors_csv = Generate the aggregate papers authors csv
-def gen_final_papers_authors_csv(wd_path):
-    folder_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\doi_papers_authors"
+# Fn12: gen_final_papers_csv = Generate the aggregate papers data in a csv
+def gen_final_papers_csv(wd_path,scrap_fn):
+    # 1. Get the path to the folder with the files
+    if scrap_fn == 'paper_authors':
+        folder_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\doi_papers_authors"
+    elif scrap_fn == 'paper_info':
+        folder_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\doi_papers_info"
     files_vector = os.listdir(folder_path) # Get all the files in the folder
     # 2. Initialize an empty list to store DataFrames
     dfs = []
@@ -282,16 +455,20 @@ def gen_final_papers_authors_csv(wd_path):
     # 4. Concatenate all DataFrames in the list into a single DataFrame
     final_df = pd.concat(dfs, ignore_index=True)
     # 5. Delete the paper_author_position and delete duplicates in general
-    final_df = final_df.drop(columns = ['paper_author_position'])
+    if scrap_fn == 'paper_authors':
+        final_df = final_df.drop(columns = ['paper_author_position'])
     final_df = final_df.drop_duplicates()
     # 6. Save the final DataFrame
-    final_file_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\doi_papers_authors_openalex.csv"
+    if scrap_fn == 'paper_authors':
+        final_file_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\doi_papers_authors_openalex.csv"
+    elif scrap_fn == 'paper_info':
+        final_file_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\doi_papers_info_openalex.csv"
     final_df.to_csv(final_file_path, index = False)
     print("The 'doi_papers_authors_openalex.csv' file has been saved successfully")
     return final_df
 
-# Fn11: gen_papers_doi_to_call = Generate the papers doi to call the API
-def gen_papers_doi_to_call(wd_path,source):
+# Fn13: gen_papers_doi_to_call = Generate the papers doi to call the API
+def gen_papers_doi_to_call(wd_path,source,scrap_fn):
     # S.1 Open the input data provided by Moqi
     if source == "aarc":
         file_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\AARC_people_DOI.xlsx"
@@ -308,7 +485,10 @@ def gen_papers_doi_to_call(wd_path,source):
     df_papers = df_papers.drop_duplicates()
 
     # S.2 Open the already scrapped data
-    file_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\doi_papers_authors_openalex.csv"
+    if scrap_fn == 'paper_authors':
+        file_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\doi_papers_authors_openalex.csv"
+    elif scrap_fn == 'paper_info':
+        file_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\doi_papers_info_openalex.csv"
     df_papers_authors = pd.read_csv(file_path)
     # S.2.1 Select specific columns, rename columns and prepare for the merge
     sel_cols  = ['paper_doi']
@@ -326,7 +506,7 @@ def gen_papers_doi_to_call(wd_path,source):
     # S.4 Return the pending to scrap DataFrame
     return merged_df
 
-# Fn12: generate_scrap_batches = Divide the Dataframe into the scrap batches
+# Fn14: generate_scrap_batches = Divide the Dataframe into the scrap batches
 def generate_id_batches(df,batch_size):
     # Parameters
     num_rows = len(df)                  # Number of rows in the DataFrame
@@ -345,7 +525,7 @@ def generate_id_batches(df,batch_size):
     
     return id_vector_list
 
-# Fn13: format_authors_names = Format the author names previous to match by doi-author_name
+# Fn15: format_authors_names = Format the author names previous to match by doi-author_name
 def format_authors_names(df,var_name,message=False):
     # S1. Split the 'author_display_name' column into multiple columns
     names_split = df[var_name].str.split(' ', expand=True)
@@ -365,7 +545,7 @@ def format_authors_names(df,var_name,message=False):
     # S.8 Return the formatted DataFrame
     return df
 
-# Fn14: prepare_names_for_merge = Prepare the names for the merge, based on the number of components
+# Fn16: prepare_names_for_merge = Prepare the names for the merge, based on the number of components
 def prepare_names_for_merge(df,type_df,var_name,num_c,format_doi=False):
     # S1. Filter by number of components
     df = df[df[f'{var_name}_tot']==num_c]
@@ -403,7 +583,7 @@ def prepare_names_for_merge(df,type_df,var_name,num_c,format_doi=False):
     # S.6 Return the formatted DataFrame
     return df
 
-# Fn15: merge_and_save_dfs = Merge the original and open Alex DataFrames and save the matches
+# Fn17: merge_and_save_dfs = Merge the original and open Alex DataFrames and save the matches
 def merge_and_save_dfs(df1,df2,num_components):
     # S.1 Merge the dataframes
     df = pd.merge(df1, df2, on = 'key', how = 'left')
@@ -420,7 +600,7 @@ def merge_and_save_dfs(df1,df2,num_components):
     # S.4 Return the DataFrame
     return df
 
-# Fn16: get_authors_surnames(df) = Get the surnames of the authors
+# Fn18: get_authors_surnames = Get the surnames of the authors
 def filter_df_and_test_surnames(df):
     # 1. Get relevant columns and remove duplicates
     df.rename(columns = {'aarc_personid':'PersonId','aarc_name':'PersonName',
@@ -440,7 +620,7 @@ def filter_df_and_test_surnames(df):
     # 3. Return the DataFrame
     return df
 
-# Fn17: gen_final_aarc_openalex_authors_dictionary = Generate the final aarc openalex authors file and the authors dictionary
+# Fn19: gen_final_aarc_openalex_authors_dictionary = Generate the final aarc openalex authors file and the authors dictionary
 def gen_final_aarc_openalex_authors_dictionary(wd_path):
     folder_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\aarc_openalex_authors_matches"
     files_vector = os.listdir(folder_path) # Get all the files in the folder
@@ -518,7 +698,7 @@ def gen_final_aarc_openalex_authors_dictionary(wd_path):
     # 12. Return the final DataFrame
     return df2
 
-# Fn18: get_pending_authors = Get the authors that have not been matched from previous iterations
+# Fn20: get_pending_authors = Get the authors that have not been matched from previous iterations
 def get_pending_authors(wd_path,df):
     # 1. Open the final dictionary
     fp = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\aarc_openalex_author_intermediate_dictionary.xlsx"
@@ -535,7 +715,7 @@ def get_pending_authors(wd_path,df):
     # 4. Return the final DataFrame|
     return df2
 
-# Fn19: doi_author_surname_match_excercise = Get the OpenAlexId for the authors by matching surname within each paper (using the doi to match a paper with the authors)
+# Fn21: doi_author_surname_match_excercise = Get the OpenAlexId for the authors by matching surname within each paper (using the doi to match a paper with the authors)
 def doi_author_surname_match_excercise(wd_path):
     # Step 1: Set a list of papers with doi from the original data and the OpenAlex data
     # 1.1 Original data (provided by Moqi)
@@ -624,7 +804,7 @@ def doi_author_surname_match_excercise(wd_path):
         i += 1
     return x
 
-# Fn20: fill_na_ycols_to_the_left = Fill the missing years to the left when creating a DataFrame
+# Fn22: fill_na_ycols_to_the_left = Fill the missing years to the left when creating a DataFrame
 def fill_na_ycols_to_the_left(df,max_year):
     num_lfill_columns = 2025 - max_year
     lfill_column_names = ['y' + str(max_year + 1 + i) for i in range(num_lfill_columns)]
@@ -634,7 +814,7 @@ def fill_na_ycols_to_the_left(df,max_year):
     # Return the DataFrame
     return df
 
-# Fn21: fill_na_ycols_to_the_right = Fill the missing years to the right when creating a DataFrame
+# Fn23: fill_na_ycols_to_the_right = Fill the missing years to the right when creating a DataFrame
 def fill_na_ycols_to_the_right(df,min_year):
     num_rfill_columns = min_year - 2012
     rfill_column_names = ['y' + str(min_year - 1 - i) for i in range(num_rfill_columns)]
@@ -644,7 +824,7 @@ def fill_na_ycols_to_the_right(df,min_year):
     # Return the DataFrame
     return df
 
-# Fn22: handle_missing_years = Handle the missing years in the years vector
+# Fn24: handle_missing_years = Handle the missing years in the years vector
 def handle_missing_years(years,works_counts,max_year,min_year):
     # Check wich years are missing in the years vector
     all_years_set = set(range(min_year, max_year +1)) # Set of all years
@@ -672,7 +852,7 @@ def handle_missing_years(years,works_counts,max_year,min_year):
     # Return the two vectors
     return years_new, works_counts_new
 
-# Fn23: format_author_df = Format the final df the get_works_by_year function produces
+# Fn25: format_author_df = Format the final df the get_works_by_year function produces
 def format_author_df(df,aid_id,aid_display_name,author_id,aid_works_count):
     # Add some extra columns to the dataframe
     df['author_id'] = aid_id
@@ -686,7 +866,7 @@ def format_author_df(df,aid_id,aid_display_name,author_id,aid_works_count):
     df = df[new_order] # Reorder the DataFrame
     return df
 
-# Fn24: gen_empty_author_df = Generate an empty DataFrame for authors that have no data (either not found by the API or deleted)
+# Fn26: gen_empty_author_df = Generate an empty DataFrame for authors that have no data (either not found by the API or deleted)
 def gen_empty_author_df(aid_id,aid_display_name,author_id,aid_works_count):
     # Define and return an empty dataframe
     df = pd.DataFrame({
@@ -698,7 +878,7 @@ def gen_empty_author_df(aid_id,aid_display_name,author_id,aid_works_count):
     df = format_author_df(df,aid_id,aid_display_name,author_id,aid_works_count)
     return df
 
-# Fn25: get_works_by_year = Get the works by year for a given author_id
+# Fn27: get_works_by_year = Get the works by year for a given author_id
 def get_works_by_year(author_id):
     # Call the API
     aid_response = requests.get(author_id)
@@ -778,14 +958,14 @@ def get_works_by_year(author_id):
             df = format_author_df(df,aid_id,aid_display_name,author_id,aid_works_count)
             return df
 
-# Fn26: process_author_id = Function that enable multiple workers to call the get_works_by_year function
+# Fn28: process_author_id = Function that enable multiple workers to call the get_works_by_year function
 def process_author_id(author_id):
     # 3 workers --> time sleep = 0.05
     # 4 workers --> time sleep = 0.20
     time.sleep(0.06) # Introduce a small delay between requests
     return get_works_by_year(author_id)
 
-# Fn27: linear_works_by_year = Linear process to get the works by year for a list of authors
+# Fn29: linear_works_by_year = Linear process to get the works by year for a list of authors
 def linear_works_by_year(wd_path,authors_vec):
     # Linear process
     authors_list = []
@@ -807,7 +987,7 @@ def linear_works_by_year(wd_path,authors_vec):
     # Return the DataFrame
     return linear_authors_df
 
-# Fn28: parallel_works_by_year = Parallel process to get the works by year for a list of authors
+# Fn30: parallel_works_by_year = Parallel process to get the works by year for a list of authors
 def parallel_works_by_year(wd_path,authors_vec):
     # Parallel process, limited to 3 workers due to API response constraints
     # Initialize an empty list to store the results
@@ -828,7 +1008,7 @@ def parallel_works_by_year(wd_path,authors_vec):
     # Return the DataFrame
     return parallel_authors_df
 
-# Fn29: gen_final_works_by_year_csv = Generate the final works by year DataFrame
+# Fn31: gen_final_works_by_year_csv = Generate the final works by year DataFrame
 def gen_final_works_by_year_csv(wd_path):
     folder_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\openalex_authorids_dfs"
     files_vector = os.listdir(folder_path) # Get all the files in the folder
@@ -849,7 +1029,7 @@ def gen_final_works_by_year_csv(wd_path):
     print("The authors works has been saved succesfully")
     return final_df
 
-# Fn30: gen_authors_ids_to_call = Generate the authors ids to call the API
+# Fn32: gen_authors_ids_to_call = Generate the authors ids to call the API
 def gen_authors_ids_to_call(wd_path,dictionary_type):
     # Open the intermediate dictionary (user dependent)
     if dictionary_type == 'aarc_openalex_author_intermediate_dictionary':
@@ -883,7 +1063,7 @@ def gen_authors_ids_to_call(wd_path,dictionary_type):
     # Return the pending to scrap DataFrame
     return merged_df
 
-# Fn31: gen_final_data_with_oa_ids = Generate the final data with the OpenAlex ids
+# Fn33: gen_final_data_with_oa_ids = Generate the final data with the OpenAlex ids
 def gen_final_data_with_oa_ids(wd_path,file_name):
     # 5.1 Open the data files
     fp = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\"+file_name+".csv"
@@ -893,7 +1073,7 @@ def gen_final_data_with_oa_ids(wd_path,file_name):
     dict_fp = wd_path + "\\data\\raw\\aarc_openalex_match\\output_files\\aarc_openalex_author_dictionary.xlsx"
     dict_df = pd.read_excel(dict_fp)
     dict_df['PersonId'] = dict_df['PersonId'].astype(str)
-    dict_df = dict_df.drop(columns=['matched']) # Drop the matched column
+    dict_df = dict_df.drop(columns=['AutoMatch']) # Drop the matched column
     # 5.3 Merge the data with the dictionary and do a check
     oa_authorid_df = pd.merge(df, dict_df, on = "PersonId", how = "left") # Merge with the dictionary
     check_duplicates_and_missing_values(original_df = df, new_df = oa_authorid_df, column_name='PersonOpenAlexId')
@@ -917,7 +1097,7 @@ def gen_final_data_with_oa_ids(wd_path,file_name):
     print("The file was saved in: ", file_path)
     return oa_authorid_inst_df
         
-# Fn32: prepare_twitter_data = Prepare the twitter data for the twitter-openalex-aarc matching (1:1 matching)
+# Fn34: prepare_twitter_data = Prepare the twitter data for the twitter-openalex-aarc matching (1:1 matching)
 def prepare_twitter_data(wd_path):
     # 1. Load the twitter data
     fp = wd_path + "\\data\\raw\\twitter_openalex\\input_files\\authors_tweeters_2024_02.csv"
@@ -954,3 +1134,116 @@ def prepare_twitter_data(wd_path):
     t_df_ndups_oa_ndups.to_csv(fp, index=False)
     print("The clean 1:1 dataset has been successfully saved.")
     return t_df_ndups_oa_ndups
+
+# Fn35 use_aux_df = Use the auxiliary file to know which authors to keep from the duplicates df
+def merge_aux_df(main_df, aux_df):
+    # 1. Prepare the auxiliary file
+    sel_cols = ['PersonId','PersonOpenAlexId','keep']
+    aux_df = aux_df[sel_cols] # Select the columns
+    aux_df['PersonId'] = aux_df['PersonId'].astype(str) # Change the type of the column to string
+    aux_df['key'] = aux_df['PersonId'] + aux_df['PersonOpenAlexId'] # Create a key to merge the two datasets
+    aux_df = aux_df[['key','keep']] # Select the columns
+    
+    # 2. Prepare the main file
+    main_df['PersonId'] = main_df['PersonId'].astype(str) # Change the type of the column to string
+    main_df['key'] = main_df['PersonId'] + main_df['PersonOpenAlexId'] # Create a key to merge the two datasets
+
+    # 3. Merge the two datasets
+    non_dup_df = pd.merge(main_df, aux_df, on = 'key', how = 'left') # Merge the two datasets
+    check_duplicates_and_missing_values(main_df,non_dup_df,"keep",False) # Check potential duplicates when merging the main and the auxiliary file
+    # 3. Keep only unique authors and remove the 'key' column
+    non_dup_df = non_dup_df[non_dup_df['keep'] == 'Yes'] # Keep only the authors to keep
+    non_dup_df = non_dup_df.drop(columns=['key']) # Drop non useful columns
+    return non_dup_df
+
+# Fn36 gen_aarc_openalex_dictionary = Generate the AARC-OpenAlex dictionary depending on the type of dictionary (reduced vs full sample)
+def gen_aarc_openalex_dictionary(wd_path, dictionary_type):
+    # 4.0 Check that the user inputs the proper dictionary type
+    valid_types = ["reduced sample", "full sample"]
+    if dictionary_type not in valid_types:
+        raise ValueError(f"Invalid dictionary_type: '{dictionary_type}'. Must be one of {valid_types}.")
+    if dictionary_type == "reduced sample":
+          # Input file path
+          file_path       = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\aarc_openalex_author_intermediate_dictionary.xlsx"
+          # Output file path
+          final_file_path = wd_path + "\\data\\raw\\aarc_openalex_match\\output_files\\aarc_openalex_author_dictionary.xlsx"
+    if dictionary_type == "full sample":
+          # Input file path
+          file_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\aarc_openalex_author_intermediate_businessecon_dictionary.xlsx"
+          # Output file path
+          final_file_path = wd_path + "\\data\\raw\\aarc_openalex_match\\output_files\\aarc_openalex_author_businessecon_dictionary.xlsx"
+    
+    # 4.1 Open the intermediate dictionary and isolate the duplicates and the missing values
+    dict_df = pd.read_excel(file_path)
+    missing_authors_df  = dict_df[dict_df['matched'] == 0] # Missing authors df
+    nmissing_authors_df = dict_df[dict_df['matched'] == 1] # Matched authors df
+
+    # 4.2 Solve the OpenAlexId duplicates problem
+    # 4.2.1 Divide the df between unique and duplicates authors
+    nmissing_authors_df['PersonId_dups'] = nmissing_authors_df['PersonId'].map(nmissing_authors_df['PersonId'].value_counts()) # Count the duplicates
+    unique_authors_df = nmissing_authors_df[nmissing_authors_df['PersonId_dups'] == 1] # Get the unique authors
+    duplicates_authors_df = nmissing_authors_df[nmissing_authors_df['PersonId_dups'] > 1] # Get the duplicates authors
+    # 4.2.2. Use auxiliary file(s) to know which authors to keep from the duplicates df
+    aux_fp = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\aarc_openalex_authors_handle_duplicates_manual_file.xlsx"
+    aux_df = pd.read_excel(aux_fp,sheet_name="Sheet1") # Open the auxiliary file
+    duplicates_authors_df = merge_aux_df(duplicates_authors_df, aux_df)
+    
+    # 4.4.3 For the Full sample handle new duplicates 
+    if dictionary_type == "full sample":
+        # 1. Open the second auxiliary file
+        aux_fp_02 = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\aarc_openalex_authors_handle_duplicates_manual_file_02.xlsx"
+        aux_df_02 = pd.read_excel(aux_fp_02,sheet_name="Sheet1") # Open the auxiliary file
+        aux_df_02 = aux_df_02[aux_df_02['keep'].notnull()] # Work only with cases that have been checked
+        # 2. Work only with the authors that have not been selected from the first auxiliary file
+        solved_dups_df = duplicates_authors_df.copy()        # Copy the duplicates authors df
+        solved_dups_df = solved_dups_df[['PersonId','keep']] # Select special columns
+        solved_dups_df['PersonId'] = solved_dups_df['PersonId'].astype(int) # Put the PersonId back to an integer
+        dups_authors_df = nmissing_authors_df[nmissing_authors_df['PersonId_dups'] > 1] # Get the duplicates authors
+        working_df = pd.merge(dups_authors_df, solved_dups_df, on = 'PersonId', how = 'left') # Merge the two datasets
+        working_df = working_df[working_df['keep'].isnull()] # Keep only the authors that have not been selected
+        working_df = working_df.drop(columns=['keep'])       # Drop the 'keep' column to avoid errors
+        # 3. Use the second auxiliary file to know which authors to keep from the duplicates df
+        duplicates_authors_df_02 = merge_aux_df(working_df, aux_df_02)
+        # 4. Concatenate the two datasets and remove duplicates (just in case)
+        duplicates_authors_df = pd.concat([duplicates_authors_df, duplicates_authors_df_02], ignore_index=True)
+        duplicates_authors_df = duplicates_authors_df.drop_duplicates() # Drop the duplicates
+    
+    # 4.2.4 Run a test to check if any duplicates remain 
+    duplicates_authors_df['PersonId_dups_new'] = duplicates_authors_df['PersonId'].map(duplicates_authors_df['PersonId'].value_counts()) # Count the duplicates
+    unique_values = duplicates_authors_df['PersonId_dups_new'].unique() # Get the unique values
+    test_unique_values = unique_values.shape[0] # Get the number of unique values
+    assert test_unique_values == 1, "Error: There are still duplicates in the dataset! Do a further check!"
+    # 4.2.5 Concatenate the unique dataset with the corrected duplicates authors df and do a final check
+    duplicates_authors_df = duplicates_authors_df.drop(columns=['keep','PersonId_dups_new']) # Drop non useful columns
+    # 4.2.6 Concatenate the missing authors with the corrected duplicates authors
+    nmissing_authors_new_df = pd.concat([unique_authors_df, duplicates_authors_df], ignore_index=True)
+    nmissing_authors_new_df = nmissing_authors_new_df.drop(columns=['PersonId_dups']) # Drop non useful columns
+
+    # 4.3 Add the manually searched authors to the final dictionary
+    # 4.3.1 Open the manual authors file
+    man_fp = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\manual_aarc_openaalex_matches.xlsx"
+    manual_authors_df = pd.read_excel(man_fp)
+    manual_authors_df = manual_authors_df.drop(columns=['Comment','Resources']) # Drop non useful columns
+    # 4.3.2 Do a final check to know that all the missing authors are in the manual authors df
+    manual_aux_df = manual_authors_df[['PersonId']]
+    manual_aux_df['dummy'] = 1  
+    missing_authors_df = pd.merge(missing_authors_df, manual_aux_df, on = 'PersonId', how = 'left') # Merge the two datasets
+    test_df = missing_authors_df[missing_authors_df['dummy'] != 1] # Get the missing authors
+    test_manual_df = test_df.shape[0] # All of the missing authors are in the manual authors df! :)
+    if dictionary_type == "reduced sample": # Run the test only for the reduced sample
+        assert test_manual_df == 0, "Error: There are some missing authors that are not in the manual authors df! Do a further check!"
+    # 4.3.3 Concatenate the missing authors with the new authors
+    manual_authors_df['matched'] = False # Add a new column to the manual authors df to know that they were not originally matched
+    final_authors_df = pd.concat([manual_authors_df, nmissing_authors_new_df], ignore_index=True)
+    # 4.3.4 Rename the match column to improve readability
+    final_authors_df.rename(columns = {'matched':'AutoMatch'}, inplace = True) # Rename the column to merge
+
+    # 4.4 Save the final authors dictionary
+    final_authors_df.to_excel(final_file_path, index = False)
+    print(f"The {dictionary_type} dictionary was successfully saved!")
+    print(f"The path to the file is: {final_file_path}")
+
+    # 5. Return the final authors dictionary
+    return final_authors_df
+
+# End of file
