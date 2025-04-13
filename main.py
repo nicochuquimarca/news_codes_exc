@@ -105,7 +105,7 @@ print(f"\n📊 {matched_percentage:.2f}% of PersonIds were matched.")
 # Transform the dictionary into a DataFrame to continue building the final dictionary
 person_matches_df = pd.DataFrame({
     "PersonId": list(person_matches.keys()),
-    "PersonOpenAlexName": list(person_matches.values())
+    "PersonOpenAlexId": list(person_matches.values())
 })
 file_path = "C:\\Users\\nicoc\\Dropbox\\Pre_OneDrive_USFQ\\PCNICOLAS_HP_PAVILION\\Masters\\Applications2023\\EconMasters\\QMUL\\QMUL_Bursary\\data\\raw\\aarc_openalex_match\\input_files\\aarc_openalex_authors_matches_berhnard_raw_file\\bernhard_procedure_author_match.csv"
 person_matches_df.to_csv(file_path, index=False, encoding='utf-8')

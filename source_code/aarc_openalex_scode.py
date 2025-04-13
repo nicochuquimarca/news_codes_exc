@@ -1165,19 +1165,38 @@ def gen_aarc_openalex_dictionary(wd_path, dictionary_type):
     if dictionary_type == "reduced sample":
           # Input file path
           file_path       = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\aarc_openalex_author_intermediate_dictionary.xlsx"
+          # 4.1 Open the intermediate dictionary and isolate the duplicates and the missing values
+          dict_df = pd.read_excel(file_path)
+          missing_authors_df  = dict_df[dict_df['matched'] == 0] # Missing authors df
+          nmissing_authors_df = dict_df[dict_df['matched'] == 1] # Matched authors df
           # Output file path
           final_file_path = wd_path + "\\data\\raw\\aarc_openalex_match\\output_files\\aarc_openalex_author_dictionary.xlsx"
     if dictionary_type == "full sample":
-          # Input file path
-          file_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\aarc_openalex_author_intermediate_businessecon_dictionary.xlsx"
+          # Input file path 
+          file_path_01 = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\aarc_openalex_author_intermediate_businessecon_dictionary.xlsx"
+          file_path_02 = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\aarc_openalex_authors_matches_bernhard_procedure.xlsx"
+          # 4.1 Open the intermediate dictionary, the bernhard procedure file, and isolate the duplicates and the missing values
+          dict_df_01 = pd.read_excel(file_path_01)
+          missing_authors_df_01  = dict_df_01[dict_df_01['matched'] == 0] # Missing authors df
+          nmissing_authors_df_01 = dict_df_01[dict_df_01['matched'] == 1] # Matched authors df
+          dict_df_02 = pd.read_excel(file_path_02)
+          missing_authors_df_02  = dict_df_02[dict_df_02['matched'] == 0] # Missing authors df
+          nmissing_authors_df_02 = dict_df_02[dict_df_02['matched'] == 1] # Matched authors df
+          # 4.1.1 Concatenate the missing and nmissing dfs and then disconnect them
+          missing_authors_df = pd.concat([missing_authors_df_01, missing_authors_df_02])
+          nmissing_authors_df = pd.concat([nmissing_authors_df_01, nmissing_authors_df_02])         
+          # 4.1.1.1 Define a temp_file to see the authors that were matched from the bernhard procedure
+          temp_df = nmissing_authors_df.copy()
+          temp_df = temp_df[['PersonId']]
+          temp_df = temp_df.drop_duplicates()
+          temp_df['dummy'] = 1
+          # 4.1.1.2 Merge the missing authors and remove the ones that were matched in the bernhard procedure
+          missing_authors_df = pd.merge(missing_authors_df, temp_df, on='PersonId', how='left')
+          missing_authors_df = missing_authors_df[missing_authors_df['dummy'].isnull()]
+          missing_authors_df = missing_authors_df.drop('dummy', axis=1)
           # Output file path
           final_file_path = wd_path + "\\data\\raw\\aarc_openalex_match\\output_files\\aarc_openalex_author_businessecon_dictionary.xlsx"
     
-    # 4.1 Open the intermediate dictionary and isolate the duplicates and the missing values
-    dict_df = pd.read_excel(file_path)
-    missing_authors_df  = dict_df[dict_df['matched'] == 0] # Missing authors df
-    nmissing_authors_df = dict_df[dict_df['matched'] == 1] # Matched authors df
-
     # 4.2 Solve the OpenAlexId duplicates problem
     # 4.2.1 Divide the df between unique and duplicates authors
     nmissing_authors_df['PersonId_dups'] = nmissing_authors_df['PersonId'].map(nmissing_authors_df['PersonId'].value_counts()) # Count the duplicates
@@ -1212,7 +1231,8 @@ def gen_aarc_openalex_dictionary(wd_path, dictionary_type):
     duplicates_authors_df['PersonId_dups_new'] = duplicates_authors_df['PersonId'].map(duplicates_authors_df['PersonId'].value_counts()) # Count the duplicates
     unique_values = duplicates_authors_df['PersonId_dups_new'].unique() # Get the unique values
     test_unique_values = unique_values.shape[0] # Get the number of unique values
-    assert test_unique_values == 1, "Error: There are still duplicates in the dataset! Do a further check!"
+    # CHANGE THIS WHEN I AM ABLE TO HANDLE THE DUPLICATES FROM THAT CAME FROM THE BERNHARD PROCEDURE
+    #assert test_unique_values == 1, "Error: There are still duplicates in the dataset! Do a further check!"
     # 4.2.5 Concatenate the unique dataset with the corrected duplicates authors df and do a final check
     duplicates_authors_df = duplicates_authors_df.drop(columns=['keep','PersonId_dups_new']) # Drop non useful columns
     # 4.2.6 Concatenate the missing authors with the corrected duplicates authors

@@ -90,7 +90,9 @@ author_dictionary  = aarc_oa.gen_aarc_openalex_dictionary(wd_path = wd_path, dic
 x = aarc_oa.gen_final_data_with_oa_ids(wd_path = wd_path, file_name = 'final_data_usa')
 y = aarc_oa.gen_final_data_with_oa_ids(wd_path = wd_path, file_name = 'final_data_nonusa')
 
-# 6. Produce a first 'BusinessEconFaculty' file with the OpenAlexIds of the faculty members (handle OpenAlexId duplicates and concatenate the manually searched OpenAlex authors)
+
+### MOVE THIS TO THE LAST BEACAUSE IT NOW INCLUDES THE BERHNARD PROCEDURE OUTPUT
+# 6. Produce the 'BusinessEconFaculty' file with the OpenAlexIds of the faculty members (handle OpenAlexId duplicates and concatenate the manually searched OpenAlex authors)
 author_businessecon_dictionary  = aarc_oa.gen_aarc_openalex_dictionary(wd_path = wd_path, dictionary_type = "full sample")
 
 
@@ -147,6 +149,9 @@ be_list_df_02['MatchStatus'] = np.where(
         )
     )
 )
+test_path = wd_path + "\\data\\raw\\aarc_openalex_match\\output_files\\test.xlsx"
+be_list_df_02.to_excel(test_path, index=False) # Save the file to check the results
+
 # Outcome by MatchStatus
 # DOI Only	       = 11733 (41.42%)
 # Matched	       = 12683 (44.77%)
@@ -199,9 +204,11 @@ df_DOIr_mmg_anf.shape[0]
 # Conclusion: We have the information for almost all of the 11713 authors in the DOI files. I need to work on improving the match. 
 #             Not calling the API
 
+
+
 # 8. Get Bernhard's help with the match. Prepare the two databases to send him and ask him to send me the match
-DOIr_mm_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\aarc_doi_pending_matching.csv"
-df_DOIr_mm.to_csv(DOIr_mm_path, index=False) # Save the file to send to Bernhard
+#DOIr_mm_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\aarc_doi_pending_matching.csv"
+#df_DOIr_mm.to_csv(DOIr_mm_path, index=False) # Save the file to send to Bernhard
 # The other file shared with Berhnard is the 'doi_papers_authors_openalex.csv' file 
 
 
@@ -209,9 +216,9 @@ df_DOIr_mm.to_csv(DOIr_mm_path, index=False) # Save the file to send to Bernhard
 #Linear Scraper performance: 445 seconds
 #Parallel Scraper performance: 120 seconds, The Parallel scraper is 2.71 times faster.
     # 9.1 Generate the papers to call
-papers_to_call   = aarc_oa.gen_papers_doi_to_call(wd_path,source='aarc',scrap_fn = 'paper_info') # Generate the papers to call
+papers_to_call   = aarc_oa.gen_papers_doi_to_call(wd_path,source='aarc_yusuf',scrap_fn = 'paper_info') # Generate the papers to call
 papers_doi_batch = aarc_oa.generate_id_batches(df = papers_to_call, batch_size = 1000) # Transform the DataFrame into batches
-num_batches = 100   # Set the number of batches to call the API (1 batch = 1000 papers)
+num_batches = 48   # Set the number of batches to call the API (1 batch = 1000 papers)
     # 9.2 Call the API to get the authors openalex ids and names
 for i in range(0,num_batches):             # Iterate over each batch
         print("Current batch: ", i)        # Print the current batch to the user
