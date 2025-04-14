@@ -21,9 +21,12 @@
 # version 8.1: 2025-04-02: Get the OpenAlex information for the papers (title,date keywords, fields).
 # version 8.2: 2025-04-04: Continue with the OpenAlex information for the papers (title,date keywords, fields).
 # version 8.3: 2025-04-05: Continue with the OpenAlex information for the papers (title,date keywords, fields).
+# version 8.4: 2025-04-13: Handle the duplicats from the second excercise of names matching
+# version 8.5: 2025-04-14: Continue with the duplicates from the second excercise of names matching, move to functions for efficiency
 
 
 # Function List
+# Functions 38, 39, 40 and 41 where written by Bernhard Finke in the main.py file shared by slack.
 # Fn01: format_dictionary                          = Format the institution dictionary to merge with the faculty list
 # Fn02: check_duplicates_and_missing_values        = Check for duplicates and missing values in the merge
 # Fn03: format_faculty                             = Replace Institutions without an OpenAlexId with the OpenAlexId of the parent institution
@@ -60,6 +63,12 @@
 # Fn34: prepare_twitter_data                       = Prepare the twitter data for the twitter-openalex-aarc matching (1:1 matching)
 # Fn35 use_aux_df                                  = Use the auxiliary file to know which authors to keep from the duplicates df
 # Fn36 gen_aarc_openalex_dictionary                = Generate the AARC-OpenAlex dictionary depending on the type of dictionary (reduced vs full sample)
+# Fn37: get_aarc_openalex_dictionary_progress      = Get the AARC-OpenAlex dictionary progress
+# Fn38: fix_name                                   = Fix names by  capitalizing the first letter, and swapings the first and last names
+# Fn39: remove_middle_name                         = Removes the middle names (keeps only first and last names)
+# Fn40: get_last_name                              = Gets the last name of a string
+# Fn41: bernhard_matching_procedure                = Match the DOI-Author name using the Bernhard procedure
+# Fn42: format_bernhard_matches                    = Format the bernhard matches to be used to create the final dictionary
 
 
 # 0. Packages in the source code file
@@ -1034,8 +1043,10 @@ def gen_authors_ids_to_call(wd_path,dictionary_type):
     # Open the intermediate dictionary (user dependent)
     if dictionary_type == 'aarc_openalex_author_intermediate_dictionary':
         file_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\aarc_openalex_author_intermediate_dictionary.xlsx"
-    elif dictionary_type == 'aarc_openalex_author_intermediate_businessecon_dictionary':
+    if dictionary_type == 'aarc_openalex_author_intermediate_businessecon_dictionary':
         file_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\aarc_openalex_author_intermediate_businessecon_dictionary.xlsx"
+    if dictionary_type == 'aarc_openalex_authors_bernhard_procedure':
+        file_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\aarc_openalex_authors_matches_bernhard_procedure.xlsx"
     df_authors = pd.read_excel(file_path)
     
     df_authors['PersonId_dups'] = df_authors['PersonId'].map(df_authors['PersonId'].value_counts())
@@ -1135,7 +1146,7 @@ def prepare_twitter_data(wd_path):
     print("The clean 1:1 dataset has been successfully saved.")
     return t_df_ndups_oa_ndups
 
-# Fn35 use_aux_df = Use the auxiliary file to know which authors to keep from the duplicates df
+# Fn35: use_aux_df = Use the auxiliary file to know which authors to keep from the duplicates df
 def merge_aux_df(main_df, aux_df):
     # 1. Prepare the auxiliary file
     sel_cols = ['PersonId','PersonOpenAlexId','keep']
@@ -1156,7 +1167,7 @@ def merge_aux_df(main_df, aux_df):
     non_dup_df = non_dup_df.drop(columns=['key']) # Drop non useful columns
     return non_dup_df
 
-# Fn36 gen_aarc_openalex_dictionary = Generate the AARC-OpenAlex dictionary depending on the type of dictionary (reduced vs full sample)
+# Fn36: gen_aarc_openalex_dictionary = Generate the AARC-OpenAlex dictionary depending on the type of dictionary (reduced vs full sample)
 def gen_aarc_openalex_dictionary(wd_path, dictionary_type):
     # 4.0 Check that the user inputs the proper dictionary type
     valid_types = ["reduced sample", "full sample"]
@@ -1265,5 +1276,248 @@ def gen_aarc_openalex_dictionary(wd_path, dictionary_type):
 
     # 5. Return the final authors dictionary
     return final_authors_df
+
+# Fn37: get_aarc_openalex_dictionary_progress = Get the AARC-OpenAlex dictionary progress
+def get_aarc_openalex_dictionary_progress(wd_path):
+    # 7. See the authors that are in the DOI files and in the BusinessEcon Faculty list but were not matched by the first exercise
+    # 7.1 Open the DOI files
+    f_path_01 = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\AARC_people_DOI.xlsx"
+    df_DOI_01 = pd.read_excel(f_path_01, sheet_name = "Sheet1") # Read the AARC people DOI file
+    f_path_02 = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\merged_AARC_DOI_Scopus_id_Yusuf.csv"
+    df_DOI_02 = pd.read_csv(f_path_02) # Read the AARC people DOI file
+    
+    # 7.2 Select AARCId and Names and delete the duplicates
+    # 7.2.1 Work with DOI_01
+    df_01 = df_DOI_01[['aarc_personid','aarc_name']] # Select the AARCId and Names
+    df_01 = df_01.drop_duplicates() # Delete the duplicates
+    df_01 = df_01.rename(columns = {'aarc_personid':'PersonId','aarc_name':'PersonName'}) # Rename the columns
+    # 7.2.2. Work with DOI_02
+    df_02 = df_DOI_02[['personid','personname']] # Select the AARCId and Names
+    df_02 = df_02.drop_duplicates() # Delete the duplicates
+    df_02 = df_02.rename(columns = {'personid':'PersonId','personname':'PersonName'}) # Rename the columns
+    # 7.3 Concatenate the two dataframes and delete the duplicates
+    df_DOI = pd.concat([df_01,df_02],ignore_index=True) # Concatenate the two dataframes
+    df_DOI = df_DOI.drop_duplicates() # Delete the duplicates
+    
+    # 7.4 Open the BusinessEcon Faculty dictionary
+    f_path_03 = wd_path + "\\data\\raw\\aarc_openalex_match\\output_files\\aarc_openalex_author_businessecon_dictionary.xlsx"
+    be_dict_df = pd.read_excel(f_path_03, sheet_name = "Sheet1") # Read the BusinessEcon Faculty dictionary
+    be_dict_df = be_dict_df[['PersonId','PersonName']] # Select the AARCId and Names
+    be_dict_df = be_dict_df.drop_duplicates() # Delete the duplicates
+    
+    # 7.5 Open the origina BusinessEcon Faculty list
+    f_path_04 = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\BusinessEconFacultyLists.csv"
+    be_list_df = pd.read_csv(f_path_04) # Read the BusinessEcon Faculty list
+    be_list_df = be_list_df[['PersonId','PersonName']] # Select the AARCId and Names
+    be_list_df = be_list_df.drop_duplicates() # Delete the duplicates
+    
+    # 7.6 Start the merges to see the authors that are in the BusinessEcon dictionary, in the DOI files and those who are in neither of them
+    #     The main file in which all the merges will take place is be_list_df
+    # 7.6.1 Merge with those in the BusinessEcon dictionary
+    be_dict_df_tm = be_dict_df[['PersonId']] # Select the AARCId
+    be_dict_df_tm['be_dict_dummy'] = 1       # Create a dummy variable to merge
+    be_list_df_01 = pd.merge(be_list_df,be_dict_df_tm,how='left',on='PersonId') # Merge the BusinessEcon Faculty list with the BusinessEcon dictionary
+    check_duplicates_and_missing_values(original_df = be_list_df, new_df = be_list_df_01,column_name ='PersonId',check_missing_values = False) # Check the duplicates and missing values
+    # 7.6.2 Merge with those in the DOI files
+    df_DOI_tm = df_DOI[['PersonId']] # Select the AARCId
+    df_DOI_tm['DOI_dummy'] = 1       # Create a dummy variable to merge
+    df_DOI_tm = df_DOI_tm.drop_duplicates() # Delete the duplicates
+    be_list_df_02 = pd.merge(be_list_df_01,df_DOI_tm,how='left',on='PersonId') # Merge the BusinessEcon Faculty list with the DOI files
+    check_duplicates_and_missing_values(original_df = be_list_df_01, new_df = be_list_df_02,column_name ='PersonId',check_missing_values = False) # Check the duplicates and missing values
+    
+    # 7.7 Start to divide the data 
+    # 7.7.1 Create the 'MatchStatus' based on different conditions
+    be_list_df_02['MatchStatus'] = np.where(
+        be_list_df_02['be_dict_dummy'] == 1.0, 'Matched',
+        np.where(
+            (be_list_df_02['DOI_dummy'] == 1.0) & (be_list_df_02['be_dict_dummy'].isnull()), 'DOI Only',
+            np.where(
+                be_list_df_02['DOI_dummy'].isnull() & be_list_df_02['be_dict_dummy'].isnull(), 'Not in DOI files', 'Unknown'
+            )
+        )
+    )
+    # 7.8 Save the file that contains the match status for every author
+    be_list_df_02_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\BusinessEconFacultyLists_MatchingStatus.xlsx"
+    be_list_df_02.to_excel(be_list_df_02_path, index=False) # Save the file to check the results
+    print('BusinessEconFacultyLists_MatchingStatus.xlsx file saved, this file shows the matching status for every author')
+    # 7.9 Provide a summary of the match status
+    match_df = be_list_df_02.groupby('MatchStatus').size().reset_index(name='Counts') # Aggregate the data by 'MatchStatus' and count the occurrences
+    total_c  = match_df['Counts'].sum() # Calculate the total of the 'Counts' column
+    match_df['share'] = match_df['Counts'] / total_c # Add a new column 'share' that shows the share of each count with respect to the total
+    print(match_df)
+
+    # 7.9 Return the be_list_df_02 dataframe and the match_df dataframe
+    return be_list_df_02, match_df
+
+# Fn38: fix_name = Fix names by  capitalizing the first letter, and swapings the first and last names
+def fix_name(name):
+    name = name.title()            # Capitalize first letter of each word
+    name = name.split(',')         # Split the name in two parts guided by the comma
+    name = name[1] + ' ' + name[0] # Swap first and last names
+    return name.strip()            # Remove leading/trailing spaces
+
+# Fn39: remove_middle_name = Removes the middle names (keeps only first and last names)
+def remove_middle_name(name):
+    parts = name.split() # Split the name into parts (words) based on spaces
+    return ' '.join([parts[0], parts[-1]]) if len(parts) > 2 else name
+
+# Fn40: get_last_name = Gets the last name of a string
+def get_last_name(name):
+    return name.split()[-1]
+
+# Fn41: bernhard_matching_procedure = Match the DOI-Author name using the Bernhard procedure
+def bernhard_matching_procedure(wd_path):
+    # 1. Open the inputs
+    papers_fp = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\Bernhard_matching_help\\doi_papers_authors_openalex.csv"
+    papers_df = pd.read_csv(papers_fp, encoding='latin-1')
+    researchers_fp = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\Bernhard_matching_help\\aarc_doi_pending_matching.csv"
+    researchers_df = pd.read_csv(researchers_fp)
+
+    
+    # 2. Follow Bernhard's matching procedure as it appears in the original main.py file
+    # Dictionary to store matches per PersonId
+    person_matches = {}
+
+    # Process each row individually first
+    for idx, researcher_row in enumerate(researchers_df.itertuples(index=False), start=1):
+        if idx % 500 == 0:  # Print progress every n rows
+            print(f"🔄 Processed {idx} rows...")
+        #if idx == 20000:
+            #break
+        person_id = researcher_row.PersonId
+        doi_to_match = researcher_row.doi
+        formatted_name = fix_name(researcher_row.PersonName)
+
+        # Find matching papers
+        matched_papers = papers_df[papers_df['paper_doi'] == doi_to_match]
+
+        found_author_ids = set()  # Track unique author_ids for this row
+
+        for _, paper_row in matched_papers.iterrows():
+            # Clean names
+            raw_name_clean = str(paper_row['paper_raw_author_name']).replace('.', '').title().replace('-', ' ')
+            display_name_clean = str(paper_row['author_display_name']).replace('.', '').title().replace('-', ' ')
+
+            # Check for exact match
+            if formatted_name in [raw_name_clean, display_name_clean]:
+                found_author_ids.add(paper_row['author_id'])
+
+        # If no match, try removing middle names
+        if not found_author_ids:
+            formatted_name = remove_middle_name(formatted_name)
+            for _, paper_row in matched_papers.iterrows():
+                raw_name_clean = remove_middle_name(str(paper_row['paper_raw_author_name']).replace('.', '').title())
+                display_name_clean = remove_middle_name(str(paper_row['author_display_name']).replace('.', '').title())
+
+                if formatted_name in [raw_name_clean, display_name_clean]:
+                    found_author_ids.add(paper_row['author_id'])
+
+        # If no matches after removing middle names, try matching by last name
+        if not found_author_ids:
+            last_name = get_last_name(formatted_name)
+            last_name_matches = matched_papers[
+                matched_papers['author_display_name'].str.contains(last_name, case=False, na=False)]
+
+            if len(last_name_matches['author_display_name'].unique()) > 1:
+                print(
+                    f"⚠️ Multiple authors with the same last name ({last_name}) in DOI {doi_to_match}. Cannot match PersonId {person_id}.")
+            else:
+                # Proceed with usual matching by last name
+                for _, paper_row in last_name_matches.iterrows():
+                    raw_name_clean = str(paper_row['paper_raw_author_name']).replace('.', '').title().replace('-', ' ')
+                    display_name_clean = str(paper_row['author_display_name']).replace('.', '').title().replace('-',
+                                                                                                                ' ')
+
+                    if last_name in [raw_name_clean.split()[-1], display_name_clean.split()[-1]]:
+                        found_author_ids.add(paper_row['author_id'])
+
+        # Store results for this PersonId
+        if person_id not in person_matches:
+            person_matches[person_id] = set()
+        person_matches[person_id].update(found_author_ids)
+
+    # Group results by PersonId and print relevant cases
+    print("\n✅ Finished processing. Now summarizing results:\n")
+    for person_id, author_ids in person_matches.items():
+        if not author_ids:
+            print(f"❌ No match found for PersonId {person_id}")
+        elif len(author_ids) > 1:
+            print(f"⚠️ Multiple matches for PersonId {person_id}: author_ids = {author_ids}")
+
+    # Calculate the number of matched PersonIds (those with at least one author_id)
+    matched_person_ids = sum(1 for author_ids in person_matches.values() if author_ids)
+
+    # Calculate the total number of unique PersonIds in person_matches
+    total_person_ids = len(person_matches)
+
+    # Calculate and print the percentage of matched person_ids
+    matched_percentage = (matched_person_ids / total_person_ids) * 100
+    print(f"\n📊 {matched_percentage:.2f}% of PersonIds were matched.")
+
+
+    # 3. Transform to a dataframe, save the file and return the dataframe
+    # Transform the dictionary into a DataFrame to continue building the final dictionary
+    person_matches_df = pd.DataFrame({
+        "PersonId": list(person_matches.keys()),
+        "PersonOpenAlexId": list(person_matches.values())
+    })
+    file_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\aarc_openalex_authors_matches_berhnard_raw_file\\bernhard_procedure_author_match.csv"
+    person_matches_df.to_csv(file_path, index=False, encoding='utf-8')
+    print('The bernhard_procedure_author_match.csv file was correctly saved in the aarc_openalex_authors_matches_bernhard_raw_file folder')
+    return person_matches_df
+
+# Fn42: format_bernhard_matches = Format the bernhard matches to be used to create the final dictionary
+def format_bernhard_matches(wd_path):
+    # 1. Read the CSV file and change the name of the OpenAlex column (I put a wrong name in the previous code)
+    file_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\aarc_openalex_authors_matches_berhnard_raw_file\\bernhard_procedure_author_match.csv"
+    author_matches_df = pd.read_csv(file_path, encoding='utf-8', low_memory=False)
+    author_matches_df = author_matches_df.rename(columns={'PersonOpenAlexName': 'PersonOpenAlexId'}) # Rename columns
+
+    # 2. Transform the 'PersonOpenAlexId' column from string to multiple row values within the same column
+    # 2.1 Ensure the 'PersonOpenAlexId' column is parsed as sets
+    author_matches_df['PersonOpenAlexId'] = author_matches_df['PersonOpenAlexId'].apply(
+        lambda x: ast.literal_eval(x) if isinstance(x, str) and x.startswith('{') else x
+    )
+    # 2.2 Convert the 'PersonOpenAlexId' column from sets to lists
+    author_matches_df['PersonOpenAlexId'] = author_matches_df['PersonOpenAlexId'].apply(lambda x: list(x) if isinstance(x, set) else x)
+    #2.3 Use the explode method to create a new row for each element in 'PersonOpenAlexId'
+    author_matches_df = author_matches_df.explode('PersonOpenAlexId', ignore_index=True)
+
+    # 3. Add the 'PersonName' column from the AARC dataset
+    file_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\AARC_people_DOI.xlsx"
+    aarc_df = pd.read_excel(file_path, sheet_name='Sheet1')
+    # 3.1 Select columns, remove duplicates and rename columns
+    aarc_df = aarc_df[['aarc_personid', 'aarc_name']] # Select columns
+    aarc_df = aarc_df.drop_duplicates() # Remove duplicates
+    aarc_df = aarc_df.rename(columns={'aarc_personid': 'PersonId', 'aarc_name': 'PersonName'}) # Rename columns
+    # 3.2 Merge the two dataframes on 'PersonId' and do a quick check of the result
+    author_matches_dfm = pd.merge(author_matches_df, aarc_df, on='PersonId', how='left')
+    check_duplicates_and_missing_values(author_matches_df, author_matches_dfm, 'PersonName', True)
+
+    # 4. Add the 'PersonOpenAlexName' column from the AARC dataset
+    file_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\doi_papers_authors_openalex.csv"
+    ao_df = pd.read_csv(file_path, encoding='utf-8', low_memory=False)
+    # 4.1 Select columns, remove duplicates and rename columns
+    ao_df = ao_df[['author_id', 'author_display_name']] # Select columns
+    ao_df = ao_df.drop_duplicates() # Remove duplicates
+    ao_df = ao_df.rename(columns={'author_id': 'PersonOpenAlexId', 'author_display_name': 'PersonOpenAlexName'}) # Rename columns
+    # 4.2 Merge the two dataframes on 'PersonOpenAlexId' and do a quick check of the result
+    author_matches_dfmm = pd.merge(author_matches_dfm, ao_df, on='PersonOpenAlexId', how='left')
+    check_duplicates_and_missing_values(author_matches_dfm, author_matches_dfmm, 'PersonOpenAlexName', False) # It is put false beacause some values are null by definition
+
+    # 5. Reorder the columns for aesthetic purposes
+    author_matches_dfmm = author_matches_dfmm[['PersonId', 'PersonName', 'PersonOpenAlexId', 'PersonOpenAlexName']]
+    
+    # 6. Replace 'set()' for None for those unable to be matched and create a column that indicates if the author was matched or not
+    author_matches_dfmm['matched'] = author_matches_dfmm['PersonOpenAlexName'].notnull()
+    author_matches_dfmm['PersonOpenAlexId'] = author_matches_dfmm['PersonOpenAlexId'].replace("set()", None)
+    
+    # 7. Save the dataframes under the names 'aarc_openalex_authors_matches_bernhard_procedure.csv' and 'aarc_openalex_authors_nomatches_bernhard_procedure.csv'
+    fp01 = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\aarc_openalex_authors_matches_bernhard_procedure.xlsx"
+    author_matches_dfmm.to_excel(fp01, index=False)
+    print("The file 'aarc_openalex_authors_matches_bernhard_procedure' was correctly saved")
+
+    # 8. Return the dataframe
+    return author_matches_dfmm
 
 # End of file

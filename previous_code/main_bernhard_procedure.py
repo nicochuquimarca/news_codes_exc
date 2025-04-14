@@ -4,8 +4,6 @@ wd_path = "C:\\Users\\nicoc\\Dropbox\\Pre_OneDrive_USFQ\\PCNICOLAS_HP_PAVILION\\
 
 papers_df = pd.read_csv(wd_path +'\\doi_papers_authors_openalex.csv', encoding='latin-1')
 researchers_df = pd.read_csv(wd_path + '\\aarc_doi_pending_matching.csv')
-# DELETE LATER ON!
-#researchers_df = researchers_df.head(2000)
 
 # Function to fix names (capitalize first letter, swap first and last names)
 def fix_name(name):
@@ -109,12 +107,3 @@ person_matches_df = pd.DataFrame({
 })
 file_path = "C:\\Users\\nicoc\\Dropbox\\Pre_OneDrive_USFQ\\PCNICOLAS_HP_PAVILION\\Masters\\Applications2023\\EconMasters\\QMUL\\QMUL_Bursary\\data\\raw\\aarc_openalex_match\\input_files\\aarc_openalex_authors_matches_berhnard_raw_file\\bernhard_procedure_author_match.csv"
 person_matches_df.to_csv(file_path, index=False, encoding='utf-8')
-
-
-### PENDING JOB: WORK WITH THE RAW DATAFRAME TO MAKE A COMPREHENSIVE DICTIONARY DATAFRAME
-# THE FINAL COLUMNS SHOULD BE
-# These are the four columns I want to have in the final df
-# PersonId,PersonName,PersonOpenAlexId,PersonOpenAlexName
-# The name of the file should be aarc_openalex_authors_matches_bernhard_procedure.csv
-# Include the dupplicates in this file, put them in a new row
-# 24161: {'A5082611670', 'A5001633041'}
