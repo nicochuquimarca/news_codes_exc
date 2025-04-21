@@ -23,6 +23,7 @@
 # version 8.3: 2025-04-05: Continue with the OpenAlex information for the papers (title,date keywords, fields).
 # version 8.4: 2025-04-13: Handle the duplicats from the second excercise of names matching
 # version 8.5: 2025-04-14: Continue with the duplicates from the second excercise of names matching, move to functions for efficiency
+# version 9.1: 2025-04-15: Format the OpenAlex information for the papers (title,date keywords, fields).
 
 
 # Function List
@@ -38,6 +39,9 @@
 # Fn09: date_time_string                           = Get the current date and time in a string format
 # Fn10: linear_papers_scraper                      = Linear process to get the paper data (authors or info) of a list of papers
 # Fn11: parallel_papers_scraper                    = Parallel process to get the paper data (authors or info) of a list of papers
+
+## RENUMBER THE FUNCTIONS
+
 # Fn12: gen_final_papers_csv                       = Generate the aggregate papers data in a csv
 # Fn13: gen_papers_doi_to_call                     = Generate the papers doi to call the API
 # Fn14: generate_scrap_batches                     = Divide the Dataframe into the scrap batches
@@ -64,10 +68,12 @@
 # Fn35 use_aux_df                                  = Use the auxiliary file to know which authors to keep from the duplicates df
 # Fn36 gen_aarc_openalex_dictionary                = Generate the AARC-OpenAlex dictionary depending on the type of dictionary (reduced vs full sample)
 # Fn37: get_aarc_openalex_dictionary_progress      = Get the AARC-OpenAlex dictionary progress
+# Bernhard functions start here
 # Fn38: fix_name                                   = Fix names by  capitalizing the first letter, and swapings the first and last names
 # Fn39: remove_middle_name                         = Removes the middle names (keeps only first and last names)
 # Fn40: get_last_name                              = Gets the last name of a string
 # Fn41: bernhard_matching_procedure                = Match the DOI-Author name using the Bernhard procedure
+# Bernhard functions end here
 # Fn42: format_bernhard_matches                    = Format the bernhard matches to be used to create the final dictionary
 
 
@@ -445,6 +451,172 @@ def parallel_paper_scraper(wd_path,doi_vec,scrap_fn):
     # Return the DataFrame
     return parallel_papers_df
 
+# Fn12: extract_mult_topic_details = Extract the details of the topics from the JSON string, at a row level
+def extract_mult_topic_details(topics):
+    if topics and len(topics) == 1:
+        topic1 = topics[0]  # Assuming there's is only one affiliation
+        return (topic1['id'], topic1['display_name'], topic1['score'], topic1['subfield']['id'], topic1['subfield']['display_name'], topic1['field']['id'], topic1['field']['display_name'], topic1['domain']['id'], topic1['domain']['display_name'],
+                None,None,None, None, None, None, None, None, None,
+                None,None,None, None, None, None, None, None, None)
+    if topics and len(topics) == 2:
+        topic1 = topics[0]
+        topic2 = topics[1]
+        return (topic1['id'], topic1['display_name'], topic1['score'], topic1['subfield']['id'], topic1['subfield']['display_name'], topic1['field']['id'], topic1['field']['display_name'], topic1['domain']['id'], topic1['domain']['display_name'], 
+                topic2['id'], topic2['display_name'], topic2['score'], topic2['subfield']['id'], topic2['subfield']['display_name'], topic2['field']['id'], topic2['field']['display_name'], topic2['domain']['id'], topic2['domain']['display_name'],
+                None,None, None, None, None, None, None, None, None)
+    if topics and len(topics) >= 3:
+        topic1 = topics[0]
+        topic2 = topics[1]
+        topic3 = topics[2]
+        return (topic1['id'], topic1['display_name'], topic1['score'], topic1['subfield']['id'], topic1['subfield']['display_name'], topic1['field']['id'], topic1['field']['display_name'], topic1['domain']['id'], topic1['domain']['display_name'],
+                topic2['id'], topic2['display_name'], topic2['score'], topic2['subfield']['id'], topic2['subfield']['display_name'], topic2['field']['id'], topic2['field']['display_name'], topic2['domain']['id'], topic2['domain']['display_name'],
+                topic3['id'], topic3['display_name'], topic3['score'], topic3['subfield']['id'], topic3['subfield']['display_name'], topic3['field']['id'], topic3['field']['display_name'], topic3['domain']['id'], topic3['domain']['display_name'])
+    return (None, None, None, None, None, None, None, None, None,
+            None, None, None, None, None, None, None, None, None,
+            None, None, None, None, None, None, None, None, None)
+
+# Fn13: Get the topics from the JSON string, at a row level for the whole dataset
+def extract_topics(df,null_or_zero_topics): 
+    if null_or_zero_topics == True:
+        # If true, all the we set all the topics vars to None
+        df['topic_id_1']            = None
+        df['topic_name_1']          = None
+        df['topic_score_1']         = None     
+        df['topic_subfield_id_1']   = None
+        df['topic_subfield_name_1'] = None
+        df['topic_field_id_1']      = None
+        df['topic_field_name_1']    = None
+        df['topic_domain_id_1']     = None
+        df['topic_domain_name_1']   = None 
+        df['topic_id_2']            = None
+        df['topic_name_2']          = None
+        df['topic_score_2']         = None
+        df['topic_subfield_id_2']   = None
+        df['topic_subfield_name_2'] = None
+        df['topic_field_id_2']      = None
+        df['topic_field_name_2']    = None
+        df['topic_domain_id_2']     = None
+        df['topic_domain_name_2']   = None
+        df['topic_id_3']            = None 
+        df['topic_name_3']          = None 
+        df['topic_score_3']         = None
+        df['topic_subfield_id_3']   = None
+        df['topic_subfield_name_3'] = None
+        df['topic_field_id_3']      = None
+        df['topic_field_name_3']    = None
+        df['topic_domain_id_3']     = None
+        df['topic_domain_name_3']   = None
+    # If false, we extract the topics from the JSON string
+    if null_or_zero_topics == False:
+        # Convert the 'topics' column from JSON strings to Python objects
+        df['paper_topics_vec'] = df['paper_topics_vec'].apply(ast.literal_eval)
+        
+        # Extract the details using vectorized operations
+        (df['topic_id_1'],       df['topic_name_1'],       df['topic_score_1'],     df['topic_subfield_id_1'], df['topic_subfield_name_1'], 
+        df['topic_field_id_1'], df['topic_field_name_1'], df['topic_domain_id_1'], df['topic_domain_name_1'], 
+        df['topic_id_2'],       df['topic_name_2'],       df['topic_score_2'],     df['topic_subfield_id_2'], df['topic_subfield_name_2'], 
+        df['topic_field_id_2'], df['topic_field_name_2'], df['topic_domain_id_2'], df['topic_domain_name_2'],
+        df['topic_id_3'],       df['topic_name_3'],       df['topic_score_3'],     df['topic_subfield_id_3'], df['topic_subfield_name_3'], 
+        df['topic_field_id_3'], df['topic_field_name_3'], df['topic_domain_id_3'], df['topic_domain_name_3']) = zip(*df['paper_topics_vec'].apply(extract_mult_topic_details))
+        
+        # Extract only the ids for certain variables
+        df['topic_id_1'] = df['topic_id_1'].apply(lambda x: x.split('/')[-1]) # Extract the openalex topic id only
+        df['topic_subfield_id_1'] = df['topic_subfield_id_1'].apply(lambda x: x.split('/')[-1]) # Extract the openalex topic subfield id only
+        df['topic_field_id_1'] = df['topic_field_id_1'].apply(lambda x: x.split('/')[-1]) # Extract the openalex topic field id only
+        df['topic_domain_id_1'] = df['topic_domain_id_1'].apply(lambda x: x.split('/')[-1]) # Extract the openalex topic field id only
+        # Extract only the ids for certain variables, cases when there are 2 or more topics
+        df.loc[df['topics_count'] >= 2, 'topic_id_2'] = df.loc[df['topics_count'] >= 2, 'topic_id_2'].apply(lambda x: x.split('/')[-1]) # Topic Id
+        df.loc[df['topics_count'] >= 2, 'topic_subfield_id_2'] = df.loc[df['topics_count'] >= 2, 'topic_subfield_id_2'].apply(lambda x: x.split('/')[-1]) # Subfield Id
+        df.loc[df['topics_count'] >= 2, 'topic_field_id_2'] = df.loc[df['topics_count'] >= 2, 'topic_field_id_2'].apply(lambda x: x.split('/')[-1]) # Subfield Id
+        df.loc[df['topics_count'] >= 2, 'topic_domain_id_2'] = df.loc[df['topics_count'] >= 2, 'topic_domain_id_2'].apply(lambda x: x.split('/')[-1]) # Domain Id
+        # Extract only the ids for certain variables, cases when there are 3 topics
+        df.loc[df['topics_count'] == 3, 'topic_id_3'] = df.loc[df['topics_count'] == 3, 'topic_id_3'].apply(lambda x: x.split('/')[-1]) # Topic Id
+        df.loc[df['topics_count'] == 3, 'topic_subfield_id_3'] = df.loc[df['topics_count'] == 3, 'topic_subfield_id_3'].apply(lambda x: x.split('/')[-1]) # Subfield Id
+        df.loc[df['topics_count'] == 3, 'topic_field_id_3'] = df.loc[df['topics_count'] == 3, 'topic_field_id_3'].apply(lambda x: x.split('/')[-1]) # Field
+        df.loc[df['topics_count'] == 3, 'topic_domain_id_3'] = df.loc[df['topics_count'] == 3, 'topic_domain_id_3'].apply(lambda x: x.split('/')[-1]) # Domain
+    
+    # Return the modified DataFrame
+    return df
+
+# Fn14: gen_tfsd_summ_df = Generate either the topic, subfield, field or domain summary dataframe
+def gen_tfsd_summ_df(df, var_input, var_name):
+    # Get the number of times the {var_input}1 appers in the dataset
+    var_summ_df = df.groupby(f'{var_input}_id_1').size().reset_index(name=f'{var_input}_id_1_counts') # Aggregate the data by '{var_input}1_id' and count the occurrences
+    total_c  = var_summ_df[f'{var_input}_id_1_counts'].sum() # Calculate the total of the '{var_input}_1_counts' column
+    var_summ_df[f'{var_input}_id_1_share'] = 100*(var_summ_df[f'{var_input}_id_1_counts'] / total_c) # Add a new column 'share' that shows the share of each count with respect to the total
+    var_summ_df = var_summ_df.sort_values(by=f'{var_input}_id_1_share', ascending=False) # Sort the DataFrame in descending order by '{var_input}_id_1_share'
+    var_summ_df.rename(columns = {f'{var_input}_id_1':f'{var_input}_id'}, inplace = True) # Rename the column to merge
+    
+
+    # Get the topics from the three levels, concatenate the dataframes and drop duplicates
+    var_1_df = df[[f'{var_input}_id_1',f'{var_input}_name_1']]
+    var_1_df = var_1_df.drop_duplicates() # Drop duplicates
+    var_1_df.rename(columns = {f'{var_input}_id_1':f'{var_input}_id', f'{var_input}_name_1':f'{var_input}_name'}, inplace = True) # Rename columns
+    
+    var_2_df = df[[f'{var_input}_id_2',f'{var_input}_name_2']]
+    var_2_df = var_2_df.drop_duplicates() # Drop duplicates
+    var_2_df.rename(columns = {f'{var_input}_id_2':f'{var_input}_id',f'{var_input}_name_2':f'{var_input}_name'}, inplace = True) # Rename columns
+    
+    var_3_df = df[[f'{var_input}_id_3',f'{var_input}_name_3']]
+    var_3_df = var_3_df.drop_duplicates() # Drop duplicates
+    var_3_df.rename(columns = {f'{var_input}_id_3':f'{var_input}_id', f'{var_input}_name_3':f'{var_input}_name'}, inplace = True) # Rename columns
+    
+    var_df = pd.concat([var_1_df,var_2_df,var_3_df], axis = 0, ignore_index = True) # Concatenate the dataframes
+    var_df = var_df.drop_duplicates() # Drop duplicates
+    var_df = var_df.dropna() # Drop NaN values
+    
+    # Do a merge with the topic_summ_df to get the share of each topic in the topic 1 section
+    var_mdf = pd.merge(var_df, var_summ_df, how = 'left', on = f'{var_input}_id') # Merge the dataframes
+    check_duplicates_and_missing_values(var_df,var_mdf,f'{var_input}_id_1_share',False)
+    
+    # Sort in descending order by 'topic_id_1_share'
+    var_mdf = var_mdf.sort_values(by=f'{var_input}_id_1_share', ascending=False) # Sort the DataFrame in descending order by 'topic_id_1_share'
+    
+    # Rename the final variables for aesthetic purposes
+    var_mdf.rename(columns = {f'{var_input}_id':f'{var_name}_id', f'{var_input}_name':f'{var_name}_name', f'{var_input}_id_1_counts':f'{var_name}_id_1_counts',f'{var_input}_id_1_share':f'{var_name}_id_1_share'}, inplace = True) # Rename columns
+    
+    # Return the final dataframe
+    return var_mdf # Return the final dataframe
+
+
+# Fn15: format_final_papers_csv_papers_info = Format the final output of the papers info for the paper info option
+def format_final_papers_csv_papers_info(wd_path, df):
+    # 10.1 Select columns and delete duplicates
+    columns_to_drop = ['paper_author_position', 'author_id', 'author_display_name','paper_raw_author_name']
+    df = df.drop(columns=columns_to_drop, axis=1)
+    df = df.drop_duplicates() # Drop duplicates
+    # 10.2 Diagnose the number of topics per paper, and print the unique values to the user
+    df['topics_count'] = df['paper_topics_vec'].str.count('}')/4
+    t_count = df['topics_count'].unique()
+    print(f"The unique values for number of topics per paper are {t_count}" )
+    # 10.3 Separat the dataframes for those with Nan, 0, 1 or more than 1 topics
+    df_ntopics = df[df['topics_count'].isna()] # Select the papers with no topics
+    df_0topics = df[df['topics_count'] == 0  ] # Select the papers with 0 topics
+    df_mtopics = df[df['topics_count'] >= 1  ] # Select the papers with 1 or more topics
+    # 10.4 Get the topics data for each type of dataframe
+    df_ntopics = extract_topics(df = df_ntopics,null_or_zero_topics = True)  # Get the topics data for the papers with no topics
+    df_0topics = extract_topics(df = df_0topics,null_or_zero_topics = True)  # Get the topics data for the papers with 0 topics
+    df_mtopics = extract_topics(df = df_mtopics,null_or_zero_topics = False) # Get the topics data for the papers with 1 or more topics
+    fdf = pd.concat([df_mtopics,df_0topics,df_ntopics], axis = 0, ignore_index = True)  # Concatenate the dataframes
+    # 10.5 Get unique values for topics, subfields, fields and domains
+    topics_df    = gen_tfsd_summ_df(df = fdf, var_input = 'topic',          var_name = 'topic')
+    subfields_df = gen_tfsd_summ_df(df = fdf, var_input = 'topic_subfield', var_name = 'subfield')
+    fields_df    = gen_tfsd_summ_df(df = fdf, var_input = 'topic_field',    var_name = 'field')
+    domains_df   = gen_tfsd_summ_df(df = fdf, var_input = 'topic_domain',   var_name = 'domain')
+    # 10.6 Save them in the same excel file in a different sheet
+    # Save the dataframes in an excel file
+    fp = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\doi_papers_info_topics_dictionary_openalex.xlsx"
+    with pd.ExcelWriter(fp) as writer:
+        topics_df.to_excel(writer, sheet_name = 'topics', index = False) # Save the dataframe
+        subfields_df.to_excel(writer, sheet_name = 'subfields', index = False) # Save the dataframe
+        fields_df.to_excel(writer, sheet_name = 'fields', index = False) # Save the dataframe
+        domains_df.to_excel(writer, sheet_name = 'domains', index = False) # Save the dataframe
+    # 10.7 Return the final dataframe
+    return fdf # Return the final dataframe
+
+
+## PENDING JOB: RE-NUMBER THE FUNCTIONS
+
 # Fn12: gen_final_papers_csv = Generate the aggregate papers data in a csv
 def gen_final_papers_csv(wd_path,scrap_fn):
     # 1. Get the path to the folder with the files
@@ -471,6 +643,7 @@ def gen_final_papers_csv(wd_path,scrap_fn):
     if scrap_fn == 'paper_authors':
         final_file_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\doi_papers_authors_openalex.csv"
     elif scrap_fn == 'paper_info':
+        final_df = format_final_papers_csv_papers_info(wd_path = wd_path, df = final_df) # Format the final dataframe
         final_file_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\doi_papers_info_openalex.csv"
     final_df.to_csv(final_file_path, index = False)
     print("The 'doi_papers_authors_openalex.csv' file has been saved successfully")
@@ -1519,5 +1692,8 @@ def format_bernhard_matches(wd_path):
 
     # 8. Return the dataframe
     return author_matches_dfmm
+
+
+
 
 # End of file

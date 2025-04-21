@@ -25,15 +25,19 @@
 # version 8.3: 2025-04-05: Continue with the OpenAlex information for the papers (title,date keywords, fields).
 # version 8.4: 2025-04-13: Handle the duplicates from the second excercise of names matching
 # version 8.5: 2025-04-14: Continue with the duplicates from the second excercise of names matching, move to functions for efficiency
+# version 9.1: 2025-04-15: Format the OpenAlex information for the papers (title,date keywords, fields).
 
 # Pseudo Code
 # 0. Packages, Set Working directory and call the source code
 # 1. Get the OpenAlex PaperId and AuthorId from a list of papers using the doi code 
 # 2. Doi-author_name match first exercise
-# 3. Query the authors with duplicated PersonIds in aarc to get the number of works in their careersS
-# 4. Doi-author_name match second excercise (handle OpenAlexId duplicates and concatenate the manually searched OpenAlex authors)
+# 3. Query the authors with duplicated PersonIds in aarc to get the number of works in their careers
+# 4. Produce a first version of the dictionary for the reduced sample (the fn handles OpenAlexId duplicates and concatenates the manually searched OpenAlex authors)
 # 5. Produce the 'final_data_usa_OpenAlexIds.csv' and 'final_data_nonusa_OpenAlexIds.csv' files
-# 6. Produce a 'BusinessEconFaculty' file with the OpenAlexIds of the faculty members
+# 6. Do the match following Bernhard's matching procedure
+# 7. Produce the 'BusinessEconFaculty' file with the OpenAlexIds of the faculty members (handle OpenAlexId duplicates and concatenate the manually searched OpenAlex authors)
+# 8. Measure the progress of the match between the AARC and OpenAlex authors
+# 9. Get other relevant information at the paper level (title, date, keywords, fields)
 
 # 0. Packages
 import sys, os, pandas as pd, ast, requests, math # Import the regular packages
@@ -47,7 +51,7 @@ import numpy as np                                # For numerical operations
 # 0. Set Working directory and call the source code
 wd_path = "C:\\Users\\nicoc\\Dropbox\\Pre_OneDrive_USFQ\\PCNICOLAS_HP_PAVILION\\Masters\\Applications2023\\EconMasters\\QMUL\\QMUL_Bursary"
 os.chdir(wd_path)                          # Set the working directory
-#pd.set_option('display.max_columns', None) # Display all the columns when printing a DataFrame in the terminal
+# pd.set_option('display.max_columns', None) # Display all the columns when printing a DataFrame in the terminal
 m_path = wd_path + "\\news_codes_exc\\source_code\\" 
 sys.path.insert(0, m_path)
 import aarc_openalex_scode as aarc_oa

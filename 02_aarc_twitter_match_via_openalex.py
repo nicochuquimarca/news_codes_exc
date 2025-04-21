@@ -67,4 +67,3 @@ be_twitter_df = pd.merge(be_df, twitter_df, how = "left", on = "PersonOpenAlexId
 be_twitter_match_df = be_twitter_df[be_twitter_df["TwitterId"].notnull()]
 file_path = wd_path + "\\data\\raw\\twitter_openalex\\output_files\\aarc_openalex_twitter_author_businessecon_dictionary.xlsx"
 be_twitter_match_df.to_excel(file_path, index = False)
-
