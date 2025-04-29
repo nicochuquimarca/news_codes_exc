@@ -24,6 +24,9 @@
 # version 8.4: 2025-04-13: Handle the duplicats from the second excercise of names matching
 # version 8.5: 2025-04-14: Continue with the duplicates from the second excercise of names matching, move to functions for efficiency
 # version 9.1: 2025-04-15: Format the OpenAlex information for the papers (title,date keywords, fields).
+# version 9.2: 2025-04-23: Continue with the format of the OpenAlex information for the papers (title,date keywords, fields).
+# version 10.1: 2025-04-24: Get the openalex authors names and alternative names to check for potential change in names
+# version 10.2: 2025-04-25: Continue with the openalex authors names and alternative names to check for potential change in names
 
 
 # Function List
@@ -39,42 +42,44 @@
 # Fn09: date_time_string                           = Get the current date and time in a string format
 # Fn10: linear_papers_scraper                      = Linear process to get the paper data (authors or info) of a list of papers
 # Fn11: parallel_papers_scraper                    = Parallel process to get the paper data (authors or info) of a list of papers
-
-## RENUMBER THE FUNCTIONS
-
-# Fn12: gen_final_papers_csv                       = Generate the aggregate papers data in a csv
-# Fn13: gen_papers_doi_to_call                     = Generate the papers doi to call the API
-# Fn14: generate_scrap_batches                     = Divide the Dataframe into the scrap batches
-# Fn15: format_authors_names                       = Format the author names previous to match by doi-author_name
-# Fn16. prepare_names_for_merge                    = Prepare the names for the merge, based on the number of components
-# Fn17: merge_and_save_dfs                         = Merge the original and open Alex DataFrames and save the matches
-# Fn18: get_authors_surnames                       = Get the surnames of the authors
-# Fn19: gen_final_aarc_openalex_authors_dictionary = Generate the final aarc openalex authors file and the authors dictionary
-# Fn20: get_pending_authors                        = Get the authors that have not been matched from previous iterations
-# Fn21: doi_author_surname_match_excercise         = Get the OpenAlexId for the authors by matching surname within each paper (using the doi to match a paper with the authors)
-# Fn22: fill_na_ycols_to_the_left                  = Fill the missing years to the left when creating a DataFrame
-# Fn23: fill_na_ycols_to_the_right                 = Fill the missing years to the right when creating a DataFrame
-# Fn24: handle_missing_years                       = Handle the missing years in the years vector
-# Fn25: format_author_df                           = Format the final df the get_works_by_year function produces
-# Fn26: gen_empty_author_df                        = Generate an empty DataFrame for authors that have no data (either not found by the API or deleted)
-# Fn27: get_works_by_year                          = Get the works by year for a given author_id
-# Fn28: process_author_id                          = Function that enable multiple workers to call the get_works_by_year function
-# Fn29: linear_works_by_year                       = Linear process to get the works by year for a list of authors
-# Fn30: parallel_works_by_year                     = Parallel process to get the works by year for a list of authors
-# Fn31: gen_final_works_by_year_csv                = Generate the final works by year DataFrame
-# Fn32: gen_authors_ids_to_call                    = Generate the authors ids to call the API
-# Fn33: gen_final_data_with_oa_ids                 = Generate the final data with the OpenAlex ids
-# Fn34: prepare_twitter_data                       = Prepare the twitter data for the twitter-openalex-aarc matching (1:1 matching)
-# Fn35 use_aux_df                                  = Use the auxiliary file to know which authors to keep from the duplicates df
-# Fn36 gen_aarc_openalex_dictionary                = Generate the AARC-OpenAlex dictionary depending on the type of dictionary (reduced vs full sample)
-# Fn37: get_aarc_openalex_dictionary_progress      = Get the AARC-OpenAlex dictionary progress
+# Fn12: extract_mult_topic_details = Extract the details of the topics from the JSON string, at a row level
+# Fn13: Get the topics from the JSON string, at a row level for the whole dataset
+# Fn14: gen_tfsd_summ_df = Generate either the topic, subfield, field or domain summary dataframe
+# Fn15: gen_ts_summ_df = Generate the topic and subfield summary dataframe
+# Fn16: format_final_papers_csv_papers_info = Format the final output of the papers info for the paper info option
+# Fn17: gen_final_papers_csv                       = Generate the aggregate papers data in a csv
+# Fn18: gen_papers_doi_to_call                     = Generate the papers doi to call the API
+# Fn19: generate_scrap_batches                     = Divide the Dataframe into the scrap batches
+# Fn20: format_authors_names                       = Format the author names previous to match by doi-author_name
+# Fn21: prepare_names_for_merge                    = Prepare the names for the merge, based on the number of components
+# Fn22: merge_and_save_dfs                         = Merge the original and open Alex DataFrames and save the matches
+# Fn23: get_authors_surnames                       = Get the surnames of the authors
+# Fn24: gen_final_aarc_openalex_authors_dictionary = Generate the final aarc openalex authors file and the authors dictionary
+# Fn25: get_pending_authors                        = Get the authors that have not been matched from previous iterations
+# Fn26: doi_author_surname_match_excercise         = Get the OpenAlexId for the authors by matching surname within each paper (using the doi to match a paper with the authors)
+# Fn27: fill_na_ycols_to_the_left                  = Fill the missing years to the left when creating a DataFrame
+# Fn28: fill_na_ycols_to_the_right                 = Fill the missing years to the right when creating a DataFrame
+# Fn29: handle_missing_years                       = Handle the missing years in the years vector
+# Fn30: format_author_df                           = Format the final df the get_works_by_year function produces
+# Fn31: gen_empty_author_df                        = Generate an empty DataFrame for authors that have no data (either not found by the API or deleted)
+# Fn32: get_works_by_year                          = Get the works by year for a given author_id
+# Fn33: process_author_id                          = Function that enable multiple workers to call the get_works_by_year function
+# Fn34: linear_works_by_year                       = Linear process to get the works by year for a list of authors
+# Fn35: parallel_works_by_year                     = Parallel process to get the works by year for a list of authors
+# Fn36: gen_final_works_by_year_csv                = Generate the final works by year DataFrame
+# Fn37: gen_authors_ids_to_call                    = Generate the authors ids to call the API
+# Fn38: gen_final_data_with_oa_ids                 = Generate the final data with the OpenAlex ids
+# Fn39: prepare_twitter_data                       = Prepare the twitter data for the twitter-openalex-aarc matching (1:1 matching)
+# Fn40: merge_aux_df                               = Use the auxiliary file to know which authors to keep from the duplicates df
+# Fn41 gen_aarc_openalex_dictionary                = Generate the AARC-OpenAlex dictionary depending on the type of dictionary (reduced vs full sample)
+# Fn42: get_aarc_openalex_dictionary_progress      = Get the AARC-OpenAlex dictionary progress
 # Bernhard functions start here
-# Fn38: fix_name                                   = Fix names by  capitalizing the first letter, and swapings the first and last names
-# Fn39: remove_middle_name                         = Removes the middle names (keeps only first and last names)
-# Fn40: get_last_name                              = Gets the last name of a string
-# Fn41: bernhard_matching_procedure                = Match the DOI-Author name using the Bernhard procedure
+# Fn43: fix_name                                   = Fix names by  capitalizing the first letter, and swapings the first and last names
+# Fn44: remove_middle_name                         = Removes the middle names (keeps only first and last names)
+# Fn45: get_last_name                              = Gets the last name of a string
+# Fn46: bernhard_matching_procedure                = Match the DOI-Author name using the Bernhard procedure
 # Bernhard functions end here
-# Fn42: format_bernhard_matches                    = Format the bernhard matches to be used to create the final dictionary
+# Fn47: format_bernhard_matches                    = Format the bernhard matches to be used to create the final dictionary
 
 
 # 0. Packages in the source code file
@@ -578,8 +583,48 @@ def gen_tfsd_summ_df(df, var_input, var_name):
     # Return the final dataframe
     return var_mdf # Return the final dataframe
 
+# Fn15: gen_ts_summ_df = Generate the topic and subfield summary dataframe
+def gen_ts_summ_df(df):
+    # Get the number of times the {var_input}1 appers in the dataset
+    df['topic_subfield_key'] = df['topic_id_1'] + df['topic_subfield_id_1'] # Create a key to aggregate the data
+    var_summ_df = df.groupby('topic_subfield_key').size().reset_index(name='topic_subfield_key_counts') # Aggregate the data by '{var_input}1_id' and count the occurrences
+    total_c  = var_summ_df['topic_subfield_key_counts'].sum() # Calculate the total of the ''topic_subfield_key'_counts' column
+    var_summ_df['topic_subfield_key_share'] = 100*(var_summ_df['topic_subfield_key_counts'] / total_c) # Add a new column 'share' that shows the share of each count with respect to the total
+    var_summ_df = var_summ_df.sort_values(by='topic_subfield_key_share', ascending=False) # Sort the DataFrame in descending order by '{var_input}_id_1_share'
+        
+    # Get the topics + subfields from the three levels
+    topic_subfield_1_df = df[['topic_id_1','topic_name_1','topic_subfield_id_1', 'topic_subfield_name_1']]
+    topic_subfield_1_df = topic_subfield_1_df.drop_duplicates()
+    topic_subfield_1_df = topic_subfield_1_df.rename(columns = {'topic_id_1':'topic_id','topic_name_1':'topic_name','topic_subfield_id_1':'topic_subfield_id','topic_subfield_name_1':'topic_subfield_name'})
 
-# Fn15: format_final_papers_csv_papers_info = Format the final output of the papers info for the paper info option
+    topic_subfield_2_df = df[['topic_id_2','topic_name_2','topic_subfield_id_2', 'topic_subfield_name_2']]
+    topic_subfield_2_df = topic_subfield_2_df.drop_duplicates()
+    topic_subfield_2_df = topic_subfield_2_df.rename(columns = {'topic_id_2':'topic_id','topic_name_2':'topic_name','topic_subfield_id_2':'topic_subfield_id','topic_subfield_name_2':'topic_subfield_name'})
+
+    topic_subfield_3_df = df[['topic_id_3','topic_name_3','topic_subfield_id_3', 'topic_subfield_name_3']]
+    topic_subfield_3_df = topic_subfield_3_df.drop_duplicates()
+    topic_subfield_3_df = topic_subfield_3_df.rename(columns = {'topic_id_3':'topic_id','topic_name_3':'topic_name','topic_subfield_id_3':'topic_subfield_id','topic_subfield_name_3':'topic_subfield_name'})
+
+    # Concatenate the dataframes and drop duplicates
+    topic_subfield_df = pd.concat([topic_subfield_1_df,topic_subfield_2_df, topic_subfield_3_df ], axis = 0, ignore_index = True) # Concatenate the dataframes
+    topic_subfield_df = topic_subfield_df.drop_duplicates() # Drop duplicates
+    topic_subfield_df = topic_subfield_df.dropna() # Drop NaN values
+    topic_subfield_df['topic_subfield_key'] = topic_subfield_df['topic_id'] + topic_subfield_df['topic_subfield_id'] # Create a key to aggregate the data
+
+    # Do a merge with the topic_subfield_df to get the share of each topic + subfields in the topic 1 section
+    var_mdf = pd.merge(topic_subfield_df, var_summ_df, how = 'left', on ='topic_subfield_key'  ) # Merge the dataframes
+    check_duplicates_and_missing_values(topic_subfield_df,var_mdf,'topic_subfield_key_share',False)
+        
+    # Sort in descending order by 'topic_id_1_share'
+    var_mdf = var_mdf.sort_values(by='topic_subfield_key_share', ascending=False) # Sort the DataFrame in descending order by 'topic_id_1_share'
+
+    # Rename the final variables for aesthetic purposes
+    var_mdf.rename(columns = {'topic_subfield_id':'subfield_id', 'topic_subfield_name':'subfield_name'}, inplace = True) # Rename columns
+
+    # Return the final dataframe
+    return var_mdf # Return the final dataframe  
+
+# Fn16: format_final_papers_csv_papers_info = Format the final output of the papers info for the paper info option
 def format_final_papers_csv_papers_info(wd_path, df):
     # 10.1 Select columns and delete duplicates
     columns_to_drop = ['paper_author_position', 'author_id', 'author_display_name','paper_raw_author_name']
@@ -603,21 +648,22 @@ def format_final_papers_csv_papers_info(wd_path, df):
     subfields_df = gen_tfsd_summ_df(df = fdf, var_input = 'topic_subfield', var_name = 'subfield')
     fields_df    = gen_tfsd_summ_df(df = fdf, var_input = 'topic_field',    var_name = 'field')
     domains_df   = gen_tfsd_summ_df(df = fdf, var_input = 'topic_domain',   var_name = 'domain')
-    # 10.6 Save them in the same excel file in a different sheet
+    # 10.6 Get the unique combinations for topics and subfields
+    topics_subfields_df = gen_ts_summ_df(df = fdf) # Get the unique combinations for topics and subfields
+    # 10.7 Save them in the same excel file in a different sheet
     # Save the dataframes in an excel file
     fp = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\doi_papers_info_topics_dictionary_openalex.xlsx"
     with pd.ExcelWriter(fp) as writer:
+        topics_subfields_df.to_excel(writer, sheet_name = 'topics_subfields', index = False) # Save the dataframe
         topics_df.to_excel(writer, sheet_name = 'topics', index = False) # Save the dataframe
         subfields_df.to_excel(writer, sheet_name = 'subfields', index = False) # Save the dataframe
         fields_df.to_excel(writer, sheet_name = 'fields', index = False) # Save the dataframe
         domains_df.to_excel(writer, sheet_name = 'domains', index = False) # Save the dataframe
-    # 10.7 Return the final dataframe
+    # 10.8 Return the final dataframe
+    print("The 'doi_papers_info_topics_dictionary_openalex.xlsx' file has been saved successfully")
     return fdf # Return the final dataframe
 
-
-## PENDING JOB: RE-NUMBER THE FUNCTIONS
-
-# Fn12: gen_final_papers_csv = Generate the aggregate papers data in a csv
+# Fn17: gen_final_papers_csv = Generate the aggregate papers data in a csv
 def gen_final_papers_csv(wd_path,scrap_fn):
     # 1. Get the path to the folder with the files
     if scrap_fn == 'paper_authors':
@@ -649,7 +695,7 @@ def gen_final_papers_csv(wd_path,scrap_fn):
     print("The 'doi_papers_authors_openalex.csv' file has been saved successfully")
     return final_df
 
-# Fn13: gen_papers_doi_to_call = Generate the papers doi to call the API
+# Fn18: gen_papers_doi_to_call = Generate the papers doi to call the API
 def gen_papers_doi_to_call(wd_path,source,scrap_fn):
     # S.1 Open the input data provided by Moqi
     if source == "aarc":
@@ -688,7 +734,7 @@ def gen_papers_doi_to_call(wd_path,source,scrap_fn):
     # S.4 Return the pending to scrap DataFrame
     return merged_df
 
-# Fn14: generate_scrap_batches = Divide the Dataframe into the scrap batches
+# Fn19: generate_scrap_batches = Divide the Dataframe into the scrap batches
 def generate_id_batches(df,batch_size):
     # Parameters
     num_rows = len(df)                  # Number of rows in the DataFrame
@@ -707,7 +753,7 @@ def generate_id_batches(df,batch_size):
     
     return id_vector_list
 
-# Fn15: format_authors_names = Format the author names previous to match by doi-author_name
+# Fn20: format_authors_names = Format the author names previous to match by doi-author_name
 def format_authors_names(df,var_name,message=False):
     # S1. Split the 'author_display_name' column into multiple columns
     names_split = df[var_name].str.split(' ', expand=True)
@@ -727,7 +773,7 @@ def format_authors_names(df,var_name,message=False):
     # S.8 Return the formatted DataFrame
     return df
 
-# Fn16: prepare_names_for_merge = Prepare the names for the merge, based on the number of components
+# Fn21: prepare_names_for_merge = Prepare the names for the merge, based on the number of components
 def prepare_names_for_merge(df,type_df,var_name,num_c,format_doi=False):
     # S1. Filter by number of components
     df = df[df[f'{var_name}_tot']==num_c]
@@ -765,7 +811,7 @@ def prepare_names_for_merge(df,type_df,var_name,num_c,format_doi=False):
     # S.6 Return the formatted DataFrame
     return df
 
-# Fn17: merge_and_save_dfs = Merge the original and open Alex DataFrames and save the matches
+# Fn22: merge_and_save_dfs = Merge the original and open Alex DataFrames and save the matches
 def merge_and_save_dfs(df1,df2,num_components):
     # S.1 Merge the dataframes
     df = pd.merge(df1, df2, on = 'key', how = 'left')
@@ -782,7 +828,7 @@ def merge_and_save_dfs(df1,df2,num_components):
     # S.4 Return the DataFrame
     return df
 
-# Fn18: get_authors_surnames = Get the surnames of the authors
+# Fn23: get_authors_surnames = Get the surnames of the authors
 def filter_df_and_test_surnames(df):
     # 1. Get relevant columns and remove duplicates
     df.rename(columns = {'aarc_personid':'PersonId','aarc_name':'PersonName',
@@ -802,7 +848,7 @@ def filter_df_and_test_surnames(df):
     # 3. Return the DataFrame
     return df
 
-# Fn19: gen_final_aarc_openalex_authors_dictionary = Generate the final aarc openalex authors file and the authors dictionary
+# Fn24: gen_final_aarc_openalex_authors_dictionary = Generate the final aarc openalex authors file and the authors dictionary
 def gen_final_aarc_openalex_authors_dictionary(wd_path):
     folder_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\aarc_openalex_authors_matches"
     files_vector = os.listdir(folder_path) # Get all the files in the folder
@@ -880,7 +926,7 @@ def gen_final_aarc_openalex_authors_dictionary(wd_path):
     # 12. Return the final DataFrame
     return df2
 
-# Fn20: get_pending_authors = Get the authors that have not been matched from previous iterations
+# Fn25: get_pending_authors = Get the authors that have not been matched from previous iterations
 def get_pending_authors(wd_path,df):
     # 1. Open the final dictionary
     fp = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\aarc_openalex_author_intermediate_dictionary.xlsx"
@@ -897,7 +943,7 @@ def get_pending_authors(wd_path,df):
     # 4. Return the final DataFrame|
     return df2
 
-# Fn21: doi_author_surname_match_excercise = Get the OpenAlexId for the authors by matching surname within each paper (using the doi to match a paper with the authors)
+# Fn26: doi_author_surname_match_excercise = Get the OpenAlexId for the authors by matching surname within each paper (using the doi to match a paper with the authors)
 def doi_author_surname_match_excercise(wd_path):
     # Step 1: Set a list of papers with doi from the original data and the OpenAlex data
     # 1.1 Original data (provided by Moqi)
@@ -986,7 +1032,7 @@ def doi_author_surname_match_excercise(wd_path):
         i += 1
     return x
 
-# Fn22: fill_na_ycols_to_the_left = Fill the missing years to the left when creating a DataFrame
+# Fn27: fill_na_ycols_to_the_left = Fill the missing years to the left when creating a DataFrame
 def fill_na_ycols_to_the_left(df,max_year):
     num_lfill_columns = 2025 - max_year
     lfill_column_names = ['y' + str(max_year + 1 + i) for i in range(num_lfill_columns)]
@@ -996,7 +1042,7 @@ def fill_na_ycols_to_the_left(df,max_year):
     # Return the DataFrame
     return df
 
-# Fn23: fill_na_ycols_to_the_right = Fill the missing years to the right when creating a DataFrame
+# Fn28: fill_na_ycols_to_the_right = Fill the missing years to the right when creating a DataFrame
 def fill_na_ycols_to_the_right(df,min_year):
     num_rfill_columns = min_year - 2012
     rfill_column_names = ['y' + str(min_year - 1 - i) for i in range(num_rfill_columns)]
@@ -1006,7 +1052,7 @@ def fill_na_ycols_to_the_right(df,min_year):
     # Return the DataFrame
     return df
 
-# Fn24: handle_missing_years = Handle the missing years in the years vector
+# Fn29: handle_missing_years = Handle the missing years in the years vector
 def handle_missing_years(years,works_counts,max_year,min_year):
     # Check wich years are missing in the years vector
     all_years_set = set(range(min_year, max_year +1)) # Set of all years
@@ -1034,7 +1080,7 @@ def handle_missing_years(years,works_counts,max_year,min_year):
     # Return the two vectors
     return years_new, works_counts_new
 
-# Fn25: format_author_df = Format the final df the get_works_by_year function produces
+# Fn30: format_author_df = Format the final df the get_works_by_year function produces
 def format_author_df(df,aid_id,aid_display_name,author_id,aid_works_count):
     # Add some extra columns to the dataframe
     df['author_id'] = aid_id
@@ -1048,7 +1094,7 @@ def format_author_df(df,aid_id,aid_display_name,author_id,aid_works_count):
     df = df[new_order] # Reorder the DataFrame
     return df
 
-# Fn26: gen_empty_author_df = Generate an empty DataFrame for authors that have no data (either not found by the API or deleted)
+# Fn31: gen_empty_author_df = Generate an empty DataFrame for authors that have no data (either not found by the API or deleted)
 def gen_empty_author_df(aid_id,aid_display_name,author_id,aid_works_count):
     # Define and return an empty dataframe
     df = pd.DataFrame({
@@ -1060,7 +1106,7 @@ def gen_empty_author_df(aid_id,aid_display_name,author_id,aid_works_count):
     df = format_author_df(df,aid_id,aid_display_name,author_id,aid_works_count)
     return df
 
-# Fn27: get_works_by_year = Get the works by year for a given author_id
+# Fn32: get_works_by_year = Get the works by year for a given author_id
 def get_works_by_year(author_id):
     # Call the API
     aid_response = requests.get(author_id)
@@ -1140,14 +1186,14 @@ def get_works_by_year(author_id):
             df = format_author_df(df,aid_id,aid_display_name,author_id,aid_works_count)
             return df
 
-# Fn28: process_author_id = Function that enable multiple workers to call the get_works_by_year function
+# Fn33: process_author_id = Function that enable multiple workers to call the get_works_by_year function
 def process_author_id(author_id):
     # 3 workers --> time sleep = 0.05
     # 4 workers --> time sleep = 0.20
     time.sleep(0.06) # Introduce a small delay between requests
     return get_works_by_year(author_id)
 
-# Fn29: linear_works_by_year = Linear process to get the works by year for a list of authors
+# Fn34: linear_works_by_year = Linear process to get the works by year for a list of authors
 def linear_works_by_year(wd_path,authors_vec):
     # Linear process
     authors_list = []
@@ -1169,7 +1215,7 @@ def linear_works_by_year(wd_path,authors_vec):
     # Return the DataFrame
     return linear_authors_df
 
-# Fn30: parallel_works_by_year = Parallel process to get the works by year for a list of authors
+# Fn35: parallel_works_by_year = Parallel process to get the works by year for a list of authors
 def parallel_works_by_year(wd_path,authors_vec):
     # Parallel process, limited to 3 workers due to API response constraints
     # Initialize an empty list to store the results
@@ -1190,7 +1236,7 @@ def parallel_works_by_year(wd_path,authors_vec):
     # Return the DataFrame
     return parallel_authors_df
 
-# Fn31: gen_final_works_by_year_csv = Generate the final works by year DataFrame
+# Fn36: gen_final_works_by_year_csv = Generate the final works by year DataFrame
 def gen_final_works_by_year_csv(wd_path):
     folder_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\openalex_authorids_dfs"
     files_vector = os.listdir(folder_path) # Get all the files in the folder
@@ -1211,7 +1257,7 @@ def gen_final_works_by_year_csv(wd_path):
     print("The authors works has been saved succesfully")
     return final_df
 
-# Fn32: gen_authors_ids_to_call = Generate the authors ids to call the API
+# Fn37: gen_authors_ids_to_call = Generate the authors ids to call the API
 def gen_authors_ids_to_call(wd_path,dictionary_type):
     # Open the intermediate dictionary (user dependent)
     if dictionary_type == 'aarc_openalex_author_intermediate_dictionary':
@@ -1247,7 +1293,7 @@ def gen_authors_ids_to_call(wd_path,dictionary_type):
     # Return the pending to scrap DataFrame
     return merged_df
 
-# Fn33: gen_final_data_with_oa_ids = Generate the final data with the OpenAlex ids
+# Fn38: gen_final_data_with_oa_ids = Generate the final data with the OpenAlex ids
 def gen_final_data_with_oa_ids(wd_path,file_name):
     # 5.1 Open the data files
     fp = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\"+file_name+".csv"
@@ -1281,7 +1327,7 @@ def gen_final_data_with_oa_ids(wd_path,file_name):
     print("The file was saved in: ", file_path)
     return oa_authorid_inst_df
         
-# Fn34: prepare_twitter_data = Prepare the twitter data for the twitter-openalex-aarc matching (1:1 matching)
+# Fn39: prepare_twitter_data = Prepare the twitter data for the twitter-openalex-aarc matching (1:1 matching)
 def prepare_twitter_data(wd_path):
     # 1. Load the twitter data
     fp = wd_path + "\\data\\raw\\twitter_openalex\\input_files\\authors_tweeters_2024_02.csv"
@@ -1319,7 +1365,7 @@ def prepare_twitter_data(wd_path):
     print("The clean 1:1 dataset has been successfully saved.")
     return t_df_ndups_oa_ndups
 
-# Fn35: use_aux_df = Use the auxiliary file to know which authors to keep from the duplicates df
+# Fn40: merge_aux_df = Use the auxiliary file to know which authors to keep from the duplicates df
 def merge_aux_df(main_df, aux_df):
     # 1. Prepare the auxiliary file
     sel_cols = ['PersonId','PersonOpenAlexId','keep']
@@ -1340,7 +1386,7 @@ def merge_aux_df(main_df, aux_df):
     non_dup_df = non_dup_df.drop(columns=['key']) # Drop non useful columns
     return non_dup_df
 
-# Fn36: gen_aarc_openalex_dictionary = Generate the AARC-OpenAlex dictionary depending on the type of dictionary (reduced vs full sample)
+# Fn41: gen_aarc_openalex_dictionary = Generate the AARC-OpenAlex dictionary depending on the type of dictionary (reduced vs full sample)
 def gen_aarc_openalex_dictionary(wd_path, dictionary_type):
     # 4.0 Check that the user inputs the proper dictionary type
     valid_types = ["reduced sample", "full sample"]
@@ -1450,7 +1496,7 @@ def gen_aarc_openalex_dictionary(wd_path, dictionary_type):
     # 5. Return the final authors dictionary
     return final_authors_df
 
-# Fn37: get_aarc_openalex_dictionary_progress = Get the AARC-OpenAlex dictionary progress
+# Fn42: get_aarc_openalex_dictionary_progress = Get the AARC-OpenAlex dictionary progress
 def get_aarc_openalex_dictionary_progress(wd_path):
     # 7. See the authors that are in the DOI files and in the BusinessEcon Faculty list but were not matched by the first exercise
     # 7.1 Open the DOI files
@@ -1522,23 +1568,24 @@ def get_aarc_openalex_dictionary_progress(wd_path):
     # 7.9 Return the be_list_df_02 dataframe and the match_df dataframe
     return be_list_df_02, match_df
 
-# Fn38: fix_name = Fix names by  capitalizing the first letter, and swapings the first and last names
+# Start of Berhnard made functions
+# Fn43: fix_name = Fix names by  capitalizing the first letter, and swapings the first and last names
 def fix_name(name):
     name = name.title()            # Capitalize first letter of each word
     name = name.split(',')         # Split the name in two parts guided by the comma
     name = name[1] + ' ' + name[0] # Swap first and last names
     return name.strip()            # Remove leading/trailing spaces
 
-# Fn39: remove_middle_name = Removes the middle names (keeps only first and last names)
+# Fn44: remove_middle_name = Removes the middle names (keeps only first and last names)
 def remove_middle_name(name):
     parts = name.split() # Split the name into parts (words) based on spaces
     return ' '.join([parts[0], parts[-1]]) if len(parts) > 2 else name
 
-# Fn40: get_last_name = Gets the last name of a string
+# Fn45: get_last_name = Gets the last name of a string
 def get_last_name(name):
     return name.split()[-1]
 
-# Fn41: bernhard_matching_procedure = Match the DOI-Author name using the Bernhard procedure
+# Fn46: bernhard_matching_procedure = Match the DOI-Author name using the Bernhard procedure
 def bernhard_matching_procedure(wd_path):
     # 1. Open the inputs
     papers_fp = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\Bernhard_matching_help\\doi_papers_authors_openalex.csv"
@@ -1638,8 +1685,9 @@ def bernhard_matching_procedure(wd_path):
     person_matches_df.to_csv(file_path, index=False, encoding='utf-8')
     print('The bernhard_procedure_author_match.csv file was correctly saved in the aarc_openalex_authors_matches_bernhard_raw_file folder')
     return person_matches_df
+# End of Berhnard made functions
 
-# Fn42: format_bernhard_matches = Format the bernhard matches to be used to create the final dictionary
+# Fn47: format_bernhard_matches = Format the bernhard matches to be used to create the final dictionary
 def format_bernhard_matches(wd_path):
     # 1. Read the CSV file and change the name of the OpenAlex column (I put a wrong name in the previous code)
     file_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\aarc_openalex_authors_matches_berhnard_raw_file\\bernhard_procedure_author_match.csv"
@@ -1693,6 +1741,125 @@ def format_bernhard_matches(wd_path):
     # 8. Return the dataframe
     return author_matches_dfmm
 
+# Fn48: gen_author_names_df = Generate a dataframe using the author id, display name and alternative names
+def gen_author_names_df(oa_id, display_name,display_name_alternatives,alternative_names_num):
+    # Create a dataframe with the data
+    data = {
+    'id': [oa_id],
+    'display_name': [display_name],
+    'alternative_names_num': [alternative_names_num],
+    'display_name_alternatives': [display_name_alternatives]
+    }
+    # Create a DataFrame from the dictionary
+    df = pd.DataFrame(data)
+    # Return the DataFrame
+    return df
+
+# Fn49: get_author_alternative_names = Get the author alternative names from the OpenAlex API
+def get_author_alternative_names(oa_id):
+    # Set the author link
+    oa_link   = "https://api.openalex.org/people/"
+    author_id = oa_link + oa_id
+
+    # Call the API
+    aid_response = requests.get(author_id)
+    # Check if the response is successful
+    aid_response_test = aid_response.status_code
+    # If the response is not successful return an empty DataFrame
+    if aid_response_test != 200:
+        print("API response failed, create an empty DataFrame")
+        # Set the variables to None
+        display_name = None
+        display_name_alternatives = None
+        alternative_names_num = None
+        # Generate the return DataFrame
+        df = gen_author_names_df(oa_id, display_name,display_name_alternatives,alternative_names_num)
+    # If the response is successful, get the data
+    elif aid_response_test == 200:
+        aid_data  = aid_response.json()
+        # Get the data
+        display_name = aid_data['display_name'] # Get the display name
+        display_name_alternatives = aid_data['display_name_alternatives'] # Get the alternative name
+        alternative_names_num = len(display_name_alternatives)
+        # Generate the return DataFrame
+        df = gen_author_names_df(oa_id, display_name,display_name_alternatives,alternative_names_num)
+    # Return the DataFrame
+    return df
+
+# Fn50: linear_author_alternative_names = Linear process to get the alternative names for a list of authors
+def linear_author_alternative_names(wd_path,authors_vec):
+    # Linear process
+    authors_list = []
+    # Iterate over the author_ids
+    for current_iter, id in enumerate(authors_vec, start=1):  # start=1 to start counting from 1
+        # Get the df of the current id
+        df_author_names = get_author_alternative_names(id)
+        # Append the df to the list
+        authors_list.append(df_author_names)
+    # Concatenate the list of dataframes
+    linear_authors_df = pd.concat(authors_list, axis = 0)
+    # Save the DataFrame
+    # Get the dates to save the files
+    current_time = datetime.now()
+    date_string  = date_time_string(current_time = current_time)
+    path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\openalex_authors_alternative_names\\authors_alternative_names_"+date_string+".csv"
+    linear_authors_df.to_csv(path, index = False)
+    print("Authors alternative names df have been saved in the following path: ", path)
+    # Return the DataFrame
+    return linear_authors_df
+
+# Fn51: gen_final_authors_alternative_names_csv = Generate the aggregate authors alternative names csv
+def gen_final_authors_alternative_names_csv(wd_path):
+    # 1. Get the folder path and the files in the folder
+    folder_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\openalex_authors_alternative_names"
+    files_vector = os.listdir(folder_path) # Get all the files in the folder
+    # 2. Initialize an empty list to store DataFrames
+    dfs = []
+    # 3. Iterate over each file in the directory
+    for file in files_vector:
+       if file.endswith('.csv'):
+          file_path = os.path.join(folder_path, file) # Get the file path
+          df = pd.read_csv(file_path)
+          dfs.append(df)
+    # 4. Concatenate all DataFrames in the list into a single DataFrame
+    final_df = pd.concat(dfs, ignore_index=True)
+    # 6. Save the final DataFrame
+    final_file_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\openalex_authors_alternative_names.csv"
+    final_df.to_csv(final_file_path, index = False)
+    print("The 'openalex_authors_alternative_names.csv' file has been saved successfully")
+    return final_df
+
+# Fn52: gen_authors_to_call = Generate the authors OpenAlex Ids to call the API
+def gen_authors_to_call(wd_path):
+    # S1. Open the BusinessEcon Faculty Dictionary
+    file_path  = wd_path + "\\data\\raw\\aarc_openalex_match\\output_files\\aarc_openalex_author_businessecon_dictionary.xlsx"
+    df_authors = pd.read_excel(file_path)
+    
+    # S2. Select specific columns, remove duplicates and delete the 'A999999' case
+    sel_cols  = ['PersonOpenAlexId']
+    df_authors = df_authors[sel_cols]
+    df_authors = df_authors.drop_duplicates()
+    df_authors = df_authors[df_authors['PersonOpenAlexId'] != 'A9999999999']
+    
+    # S.3 Open the already scrapped data
+    file_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\openalex_authors_alternative_names.csv"
+    df_authors_alternative_names = pd.read_csv(file_path)
+     
+    # S4. Select specific columns, rename columns and prepare for the merge
+    sel_cols  = ['id']
+    df_authors_alternative_names = df_authors_alternative_names[sel_cols]
+    df_authors_alternative_names.rename(columns = {'id':'PersonOpenAlexId'}, inplace = True)
+    df_authors_alternative_names['dummy_col'] = 1
+    
+    # S.5 Merge the two DataFrames to get which ones have not been called
+    merged_df = pd.merge(df_authors, df_authors_alternative_names, on = "PersonOpenAlexId", how = "left")
+    # S.5.1 Get rid of those observations with dummy_col = 1 in the merged_df
+    merged_df = merged_df[merged_df['dummy_col'].isnull()]
+    # S.5.2 Return only the ids to call
+    merged_df = merged_df[['PersonOpenAlexId']]
+
+    # S.4 Return the pending to scrap DataFrame
+    return merged_df
 
 
 
