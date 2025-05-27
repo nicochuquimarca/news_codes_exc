@@ -27,6 +27,10 @@
 # version 9.2: 2025-04-23: Continue with the format of the OpenAlex information for the papers (title,date keywords, fields).
 # version 10.1: 2025-04-24: Get the openalex authors names and alternative names to check for potential change in names
 # version 10.2: 2025-04-25: Continue with the openalex authors names and alternative names to check for potential change in names
+# version 11.1: 2025-05-05: Produce a top-3 paper category per author
+# version 11.2: 2025-05-12: Clean the top-3 paper category per author final file
+# version 12.1: 2025-05-24: Build a per author topic scraper
+# version 12.2: 2025-05-25: Produce an author topics classification file
 
 
 # Function List
@@ -42,11 +46,11 @@
 # Fn09: date_time_string                           = Get the current date and time in a string format
 # Fn10: linear_papers_scraper                      = Linear process to get the paper data (authors or info) of a list of papers
 # Fn11: parallel_papers_scraper                    = Parallel process to get the paper data (authors or info) of a list of papers
-# Fn12: extract_mult_topic_details = Extract the details of the topics from the JSON string, at a row level
-# Fn13: Get the topics from the JSON string, at a row level for the whole dataset
-# Fn14: gen_tfsd_summ_df = Generate either the topic, subfield, field or domain summary dataframe
-# Fn15: gen_ts_summ_df = Generate the topic and subfield summary dataframe
-# Fn16: format_final_papers_csv_papers_info = Format the final output of the papers info for the paper info option
+# Fn12: extract_mult_topic_details                 = Extract the details of the topics from the JSON string, at a row level
+# Fn13: extract_topics                             = Get the topics from the JSON string, at a row level for the whole dataset
+# Fn14: gen_tfsd_summ_df                           = Generate either the topic, subfield, field or domain summary dataframe
+# Fn15: gen_ts_summ_df                             = Generate the topic and subfield summary dataframe
+# Fn16: format_final_papers_csv_papers_info        = Format the final output of the papers info for the paper info option
 # Fn17: gen_final_papers_csv                       = Generate the aggregate papers data in a csv
 # Fn18: gen_papers_doi_to_call                     = Generate the papers doi to call the API
 # Fn19: generate_scrap_batches                     = Divide the Dataframe into the scrap batches
@@ -480,7 +484,7 @@ def extract_mult_topic_details(topics):
             None, None, None, None, None, None, None, None, None,
             None, None, None, None, None, None, None, None, None)
 
-# Fn13: Get the topics from the JSON string, at a row level for the whole dataset
+# Fn13: extract_topics = Get the topics from the JSON string, at a row level for the whole dataset
 def extract_topics(df,null_or_zero_topics): 
     if null_or_zero_topics == True:
         # If true, all the we set all the topics vars to None
@@ -1861,6 +1865,198 @@ def gen_authors_to_call(wd_path):
     # S.4 Return the pending to scrap DataFrame
     return merged_df
 
+# Fn53: gen_author_topics_df = Generate a DataFrame with the author topics, subfields, and domains from OpenAlex
+def gen_author_topics_df(oa_id,ao_name,counter,topic_id,topic_display_name,topic_count,subfield_id, subfield_display_name,field_id, field_display_name,domain_id, domain_display_name):
+    # 1. Set the variables
+    data = {'id': [oa_id],'display_name': [ao_name],                                                                                    # Regular info
+            'topic_counter': [counter], 'topic_id': [topic_id],'topic_display_name': [topic_display_name],'topic_count': [topic_count], # Topic information
+            'subfield_id': [subfield_id], 'subfield_display_name': [subfield_display_name],                                             # Subfield information
+            'field_id': [field_id], 'field_display_name': [field_display_name],                                                         # Field information
+            'domain_id': [domain_id], 'domain_display_name': [domain_display_name]}                                                     # Domain information
+    # Create a DataFrame from the variables
+    df = pd.DataFrame(data)
+    # Return the DataFrame
+    return df
 
+# Fn54: delete_links = Function to delete the links from a list of variables in a DataFrame
+def delete_links(df,variable_names):
+    for var in variable_names:
+        df[var] = df[var].apply(lambda x: x.split('/')[-1] if pd.notnull(x) else x)
+    return df
+
+# Fn55: get_author_topics = Function to get the author topics, subfields, and fields of study from OpenAlex
+def get_author_topics(oa_id):
+    # 1. Set the author link
+    oa_link   = "https://api.openalex.org/people/"
+    author_id = oa_link + oa_id
+    # 2. Call the API
+    aid_response = requests.get(author_id)
+    # 3. Check if the response is successful
+    aid_response_test = aid_response.status_code
+    # 4. If the response is not successful return an empty DataFrame
+    if aid_response_test != 200:
+        print("API response failed, create an empty DataFrame")
+        # Set the variables to None
+        oa_id                 = None
+        oa_name               = None
+        counter               = None 
+        topic_id              = None 
+        topic_display_name    = None
+        topic_count           = None
+        subfield              = None
+        subfield_id           = None
+        subfield_display_name = None
+        field                 = None
+        field_id              = None
+        field_display_name    = None
+        domain                = None
+        domain_id             = None
+        domain_display_name   = None
+        # Generate the return DataFrame
+        topics_df = gen_author_topics_df(oa_id, oa_name, counter,                   # Author information
+                                    topic_id, topic_display_name, topic_count, # Topic information
+                                    subfield_id,subfield_display_name,         # Subfield information
+                                    field_id, field_display_name,              # Field information
+                                    domain_id, domain_display_name)            # Domain information
+    # 5. If the response is successful, get the data
+    elif aid_response_test == 200:
+        aid_data  = aid_response.json()    # Get the data
+        oa_id = aid_data['id']             # Get the author ID
+        oa_name = aid_data['display_name'] # Get the author display name
+        topics = aid_data['topics']        # Get the topics
+        # 5.1 If there are no topics, return an empty DataFrame
+        if len(topics) == 0:
+            counter               = 1 
+            topic_id              = None 
+            topic_display_name    = None
+            topic_count           = None
+            subfield              = None
+            subfield_id           = None
+            subfield_display_name = None
+            field                 = None
+            field_id              = None
+            field_display_name    = None
+            domain                = None
+            domain_id             = None
+            domain_display_name   = None
+            # Generate the return DataFrame
+            topics_df = gen_author_topics_df(oa_id, oa_name, counter,          # Author information
+                                    topic_id, topic_display_name, topic_count, # Topic information
+                                    subfield_id,subfield_display_name,         # Subfield information
+                                    field_id, field_display_name,              # Field information
+                                    domain_id, domain_display_name)
+            topics_df = delete_links(topics_df, ['id'])            # Domain information
+        # 5.2 If there are topics, create a DataFrame for each topic
+        elif len(topics) > 0:
+            # 5.1. Create a list to store the DataFrames
+            topics_dfs = []  # List to store DataFrames for each topic
+            # 5.2 Split them into distinct elements (each element is already a dictionary in the list)
+            for i, topic in enumerate(topics):
+                # Topic information
+                counter = i + 1                             # Count the topic number
+                topic_id = topic['id']                      # Get the topic ID
+                topic_display_name = topic['display_name']  # Get the topic display name
+                topic_count = topic['count']                # Get the works count for the topic
+                # Subfield information
+                subfield = topic['subfield']                # Get the subfield
+                subfield_id = subfield['id'] if subfield else None  # Get the subfield ID, if it exists
+                subfield_display_name = subfield['display_name'] if subfield else None  # Get the subfield display name, if it exists
+                # Field information
+                field = topic['field']              # Get the field of study
+                field_id = field['id'] if field else None    # Get the field ID, if it exists
+                field_display_name = field['display_name'] if field else None  # Get the field display name, if it exists
+                # Domain information
+                domain = topic['domain']                     # Get the domain
+                domain_id = domain['id'] if domain else None # Get the domain ID, if it exists
+                domain_display_name = domain['display_name'] if domain else None  # Get the domain display name, if it exists
+                # Create a DataFrame for each topic
+                topic_df = gen_author_topics_df(oa_id, oa_name, counter,                   # Author information
+                                                topic_id, topic_display_name, topic_count, # Topic information
+                                                subfield_id,subfield_display_name,         # Subfield information
+                                                field_id, field_display_name,              # Field information
+                                                domain_id, domain_display_name)            # Domain information
+                # Append the DataFrame to the list
+                topics_dfs.append(topic_df)
+            # 5.3 Concatenate into a single DataFrame and then delete the links
+            topics_df = pd.concat(topics_dfs, ignore_index=True)
+            topics_df = delete_links(topics_df, ['id', 'topic_id', 'subfield_id','field_id','domain_id'])
+    # 6. Return the DataFrame
+    return topics_df
+
+# Fn56: linear_author_topics_scraper = Linear function to scrape author topics, subfields, fields, and domains from OpenAlex
+def linear_author_topics_scraper(wd_path,author_vec):
+    # Linear process
+    author_list = []
+    # Iterate over the author_ids
+    for current_iter, oa_id in enumerate(author_vec, start=1): # start=1 to start counting from 1
+        # print("Processing author ", current_iter, " of ", len(author_vec), " with id: ", oa_id) # Print the current iteration
+        df_author = get_author_topics(oa_id)
+        # Append the df to the list
+        author_list.append(df_author) # Append the DataFrame to the list
+    # Concatenate the list of dataframes
+    linear_author_topics_df = pd.concat(author_list, axis = 0)
+    # Save the DataFrame
+    # Get the dates to save the files
+    current_time = datetime.now()
+    date_string  = date_time_string(current_time = current_time)
+    path = wd_path +"\\data\\raw\\aarc_openalex_match\\input_files\\authors_topics_subfields_fields_domains\\authors_tsfd_"+date_string+".csv"
+    linear_author_topics_df.to_csv(path, index=False) # Save the DataFrame to a CSV file
+    print("Author Topics/Subfields/Fields/Domains information has been saved in the following path: ", path)
+    # Return the DataFrame
+    return linear_author_topics_df
+
+# Fn57:gen_final_author_topics_csv = Generate the topics, Subfields, Fields, and Domains at the author level csv file
+def gen_final_author_topics_csv(wd_path):
+    # 1. Get the folder path and the files in the folder
+    folder_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\authors_topics_subfields_fields_domains"
+    files_vector = os.listdir(folder_path) # Get all the files in the folder
+    # 2. Initialize an empty list to store DataFrames
+    dfs = []
+    # 3. Iterate over each file in the directory
+    for file in files_vector:
+       if file.endswith('.csv'):
+          file_path = os.path.join(folder_path, file) # Get the file path
+          df = pd.read_csv(file_path)
+          dfs.append(df)
+    # 4. Concatenate all DataFrames in the list into a single DataFrame
+    final_df = pd.concat(dfs, ignore_index=True)
+    # 6. Save the final DataFrame
+    final_file_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\openalex_authors_topics.csv"
+    final_df.to_csv(final_file_path, index = False)
+    print("The 'openalex_authors_topics.csv' file has been saved successfully")
+    return final_df
+
+# Fn58: gen_author_topics_to_call = Generate the authors topics from the BusinessEcon Dictiionary to call the OpenAlex API
+def gen_author_topics_to_call(wd_path):
+    # S1. Open the BusinessEcon Faculty Dictionary
+    file_path  = wd_path + "\\data\\raw\\aarc_openalex_match\\output_files\\aarc_openalex_author_businessecon_dictionary.xlsx"
+    df_authors = pd.read_excel(file_path)
+    
+    # S2. Select specific columns, remove duplicates and delete the 'A999999' case
+    sel_cols  = ['PersonOpenAlexId']
+    df_authors = df_authors[sel_cols]
+    df_authors = df_authors.drop_duplicates()
+    df_authors = df_authors[df_authors['PersonOpenAlexId'] != 'A9999999999']
+    
+    # S.3 Open the already scrapped data
+    file_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\openalex_authors_topics.csv"
+    df_authors_topics = pd.read_csv(file_path)
+     
+    # S4. Select specific columns, drop duplicates, rename columns and prepare for the merge
+    sel_cols  = ['id']
+    df_authors_topics = df_authors_topics[sel_cols]
+    df_authors_topics = df_authors_topics.drop_duplicates()
+    df_authors_topics.rename(columns = {'id':'PersonOpenAlexId'}, inplace = True)
+    df_authors_topics['dummy_col'] = 1
+    
+    # S.5 Merge the two DataFrames to get which ones have not been called
+    merged_df = pd.merge(df_authors, df_authors_topics, on = "PersonOpenAlexId", how = "left")
+    # S.5.1 Get rid of those observations with dummy_col = 1 in the merged_df
+    merged_df = merged_df[merged_df['dummy_col'].isnull()]
+    # S.5.2 Return only the ids to call
+    merged_df = merged_df[['PersonOpenAlexId']]
+
+    # S.4 Return the pending to scrap DataFrame
+    return merged_df
 
 # End of file
