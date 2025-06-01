@@ -31,7 +31,10 @@
 # version 11.2: 2025-05-12: Clean the top-3 paper category per author final file
 # version 12.1: 2025-05-24: Build a per author topic scraper
 # version 12.2: 2025-05-25: Produce an author topics classification file
-
+# version 12.3: 2025-05-26: Continue with the author topics classification file (move the relevant code to a function)
+# version 12.4: 2025-05-27: Send the previous author topics code to a function as legacy code
+# version 12.5: 2025-05-29: Continue with the openalex authors names and alternative names to check for potential change in names
+# version 12.6: 2025-06-01: Continue with the openalex authors names and alternative names to check for potential change in names
 
 # Function List
 # Functions 38, 39, 40 and 41 where written by Bernhard Finke in the main.py file shared by slack.
@@ -84,6 +87,24 @@
 # Fn46: bernhard_matching_procedure                = Match the DOI-Author name using the Bernhard procedure
 # Bernhard functions end here
 # Fn47: format_bernhard_matches                    = Format the bernhard matches to be used to create the final dictionary
+# Fn48: gen_author_names_df                        = Generate a dataframe using the author id, display name and alternative names
+# Fn49: get_author_alternative_names               = Get the author alternative names from the OpenAlex API
+# Fn50: linear_author_alternative_names            = Linear process to get the alternative names for a list of authors
+# Fn51: gen_final_authors_alternative_names_csv    = Generate the aggregate authors alternative names csv
+# Fn52: gen_authors_to_call                        = Generate the authors OpenAlex Ids to call the API
+# Fn53: gen_author_topics_df                       = Generate a DataFrame with the author topics, subfields, and domains from OpenAlex
+# Fn54: delete_links                               = Function to delete the links from a list of variables in a DataFrame
+# Fn55: get_author_topics                          = Function to get the author topics, subfields, and fields of study from OpenAlex
+# Fn56: linear_author_topics_scraper               = Linear function to scrape author topics, subfields, fields, and domains from OpenAlex
+# Fn57: gen_author_topics_df                       = Generate the author topics DataFrame
+# Fn58:gen_final_author_topics_csv                 = Generate the topics, Subfields, Fields, and Domains at the author level csv file
+# Fn59: gen_author_topics_to_call                  = Generate the authors topics from the BusinessEcon Dictiionary to call the OpenAlex API
+# Fn60: gen_authors_topics_via_papers              = Generate the authors topics classification DataFrame via the papers information
+# Fn61: get_different_name                         = At a row level extract the corresponding name column value
+# Fn62: get_first_diff_name                        = Get the first name that does not contain the benchmark surname
+# Fn63: get_nth_diff_name                          = Get the Nth name that does not contain the benchmark surname
+# Fn64: gen_diff_name_null_cols                    = Generate null columns for the different names
+# Fn65: female_surname_change_excercise            = Get which female authors have changed their surnames in their career
 
 
 # 0. Packages in the source code file
@@ -2005,28 +2026,99 @@ def linear_author_topics_scraper(wd_path,author_vec):
     # Return the DataFrame
     return linear_author_topics_df
 
-# Fn57:gen_final_author_topics_csv = Generate the topics, Subfields, Fields, and Domains at the author level csv file
+# Fn57: gen_author_topics_df = Generate the author topics DataFrame
+def gen_author_topics_classification_df(wd_path,df):
+    # 0. Make a copy of the final DataFrame and drop duplicates
+    print("Starting the generation of the author topics classification DataFrame...")
+    at_df = df.copy()               # Create a copy of the final DataFrame
+    at_df = at_df.drop_duplicates() # Drop duplicates
+    
+    # 1. Do formatting to the author_topics file
+    # 1.1 Stay only with the three most relevant topics per author
+    at_df = at_df[at_df['topic_counter']<=3]                
+    # 1.2 Generate the topic_id and subfield_id keys
+    at_df['subfield_id'] = at_df['subfield_id'].fillna(0)
+    at_df['subfield_id'] = at_df['subfield_id'].astype(int) # Convert from float to int
+    at_df['subfield_id'] = at_df['subfield_id'].astype(str) # Convert the 'subfield_id' column to string type
+    at_df['topic_subfield_key'] = at_df['topic_id'] + at_df['subfield_id'] # Create a new column 'topic_subfield_key' that concatenates the 'topic_id' and 'subfield_id' columns
+    
+    # 2. Open the topics classification file and do some formatting
+    fp = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\topics_dictionary_openalex_MG20250512.xlsx"
+    class_df = pd.read_excel(fp)                   # Read the Excel file into a DataFrame
+    class_df = class_df[class_df['Keep'] == "Yes"] # Filter to delete some duplicates that were introduced due to horrible prior programming from Nico :(
+    sel_cols = ['topic_subfield_key','Research_topic','Research_category' ]
+    class_df = class_df[sel_cols] # Select the columns to keep
+    
+    # 3. Do the merge between the author_topics and the topics classification
+    atc_df = pd.merge(at_df, class_df, on='topic_subfield_key', how='left') # Merge the DataFrames on the 'topic_subfield_key' column
+    check_duplicates_and_missing_values(at_df,atc_df,'Research_topic',False)
+    
+    # 4. Transform the DataFrame to wide format
+    wide_atc_df = atc_df.pivot(index=['id', 'display_name'], columns='topic_counter')     # Pivot the DataFrame to wide format
+    wide_atc_df.columns = ['{}_{}'.format(col[0], col[1]) for col in wide_atc_df.columns] # Flatten the multi-level columns for better readability
+    wide_atc_df = wide_atc_df.reset_index()
+    
+    # 5. Do some formatting to the wide DataFrame
+    sel_cols = ['id', 'display_name',
+                'Research_category_1','Research_topic_1','topic_display_name_1','subfield_display_name_1', 'topic_count_1',  
+                'Research_category_2','Research_topic_2','topic_display_name_2','subfield_display_name_2', 'topic_count_2',
+                'Research_category_3','Research_topic_3','topic_display_name_3','subfield_display_name_3', 'topic_count_3',
+                'topic_subfield_key_1', 'topic_subfield_key_2', 'topic_subfield_key_3'
+                ]
+    atc_fdf = wide_atc_df[sel_cols] # Select the columns to keep
+    atc_fdf = atc_fdf.rename(columns={'id': 'PersonOpenAlexId','display_name': 'PersonOpenAlexName'}) # Rename the column to match the other DataFrame
+    
+    # 6. Merge with the AARC OpenAlex dictionary to get the PersonId and PersonName
+    # 6.1 Open the AARC OpenAlex dictionary to get the PersonId and PersonName and do some formatting
+    fp = wd_path +"\\data\\raw\\aarc_openalex_match\\output_files\\aarc_openalex_author_businessecon_dictionary.xlsx"
+    be_df = pd.read_excel(fp) # Read the Excel file into a DataFrame
+    sel_cols = ['PersonId','PersonName','PersonOpenAlexId','AutoMatch'] # Select the columns to keep
+    be_df = be_df[sel_cols] # Select the columns to keep
+    be_df = be_df.drop_duplicates() # Drop duplicates
+    # 6.2 Do the merge between the atc_fdf and the be_df
+    be_atc_df = pd.merge(be_df, atc_fdf, on='PersonOpenAlexId', how='left') # Merge the DataFrames on the 'PersonOpenAlexId' column
+    check_duplicates_and_missing_values(be_atc_df,be_df,'Research_category_1',False) # Check for duplicates and missing values
+    be_atc_df = be_atc_df.sort_values(by='AutoMatch', ascending=False) # Sort the DataFrame by the 'share' column in descending order
+    
+    # 7. Save the final DataFrame
+    fp = wd_path + "\\data\\raw\\aarc_openalex_match\\output_files\\aarc_openalex_authors_topics_classification_new.xlsx"
+    be_atc_df.to_excel(fp, index=False) # Save the DataFrame to an Excel file
+    print(f"The file 'aarc_openalex_authors_topics_classification_new.xlsx' has been saved successfully.")
+    
+    # 8. Return the final DataFrame
+    return be_atc_df # Return the final DataFrame
+
+# Fn58:gen_final_author_topics_csv = Generate the topics, Subfields, Fields, and Domains at the author level csv file
 def gen_final_author_topics_csv(wd_path):
     # 1. Get the folder path and the files in the folder
     folder_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\authors_topics_subfields_fields_domains"
     files_vector = os.listdir(folder_path) # Get all the files in the folder
+    
     # 2. Initialize an empty list to store DataFrames
     dfs = []
+    
     # 3. Iterate over each file in the directory
     for file in files_vector:
        if file.endswith('.csv'):
           file_path = os.path.join(folder_path, file) # Get the file path
           df = pd.read_csv(file_path)
           dfs.append(df)
+    
     # 4. Concatenate all DataFrames in the list into a single DataFrame
     final_df = pd.concat(dfs, ignore_index=True)
-    # 6. Save the final DataFrame
+    
+    # 5. Save the final DataFrame
     final_file_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\openalex_authors_topics.csv"
     final_df.to_csv(final_file_path, index = False)
     print("The 'openalex_authors_topics.csv' file has been saved successfully")
-    return final_df
+    
+    # 6. Generate the Classification DataFrame
+    class_df = gen_author_topics_classification_df(wd_path, final_df)
+    
+    # 7. Return the two DataFrames
+    return final_df, class_df
 
-# Fn58: gen_author_topics_to_call = Generate the authors topics from the BusinessEcon Dictiionary to call the OpenAlex API
+# Fn59: gen_author_topics_to_call = Generate the authors topics from the BusinessEcon Dictiionary to call the OpenAlex API
 def gen_author_topics_to_call(wd_path):
     # S1. Open the BusinessEcon Faculty Dictionary
     file_path  = wd_path + "\\data\\raw\\aarc_openalex_match\\output_files\\aarc_openalex_author_businessecon_dictionary.xlsx"
@@ -2058,5 +2150,313 @@ def gen_author_topics_to_call(wd_path):
 
     # S.4 Return the pending to scrap DataFrame
     return merged_df
+
+# Fn60: gen_authors_topics_via_papers = Generate the authors topics classification DataFrame via the papers information
+def gen_authors_topics_via_papers(wd_path):
+    
+    # 1. Select the folder path where the files are located
+    folder_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\doi_papers_info"
+    files_vector = os.listdir(folder_path) # Get all the files in the folder
+    
+    # 2. Initialize an empty list to store DataFrames
+    dfs = []
+    
+    # 3. Iterate over each file in the directory
+    for file in files_vector:
+       if file.endswith('.csv'):
+          file_path = os.path.join(folder_path, file) # Get the file path
+          df = pd.read_csv(file_path)
+          dfs.append(df)
+    
+    # 4. Concatenate all DataFrames in the list into a single DataFrame
+    final_df = pd.concat(dfs, ignore_index=True)
+    df = final_df.copy() # Create a copy of the final DataFrame
+    
+    # 5. Drop duplicates
+    df = df.drop_duplicates() # Drop duplicates
+    
+    # 6. Diagnose the number of topics per paper, and print the unique values to the user
+    df['topics_count'] = df['paper_topics_vec'].str.count('}')/4
+    t_count = df['topics_count'].unique()
+    print(f"The unique values for number of topics per paper are {t_count}" )
+    
+    # 7. Separat the dataframes for those with Nan, 0, 1 or more than 1 topics
+    df_ntopics = df[df['topics_count'].isna()] # Select the papers with no topics
+    df_0topics = df[df['topics_count'] == 0  ] # Select the papers with 0 topics
+    df_mtopics = df[df['topics_count'] >= 1  ] # Select the papers with 1 or more topics
+    
+    # 8. Get the topics data for each type of dataframe
+    df_ntopics = extract_topics(df = df_ntopics,null_or_zero_topics = True)  # Get the topics data for the papers with no topics
+    df_0topics = extract_topics(df = df_0topics,null_or_zero_topics = True)  # Get the topics data for the papers with 0 topics
+    df_mtopics = extract_topics(df = df_mtopics,null_or_zero_topics = False) # Get the topics data for the papers with 1 or more topics
+    df = pd.concat([df_mtopics,df_0topics,df_ntopics], axis = 0, ignore_index = True)  # Concatenate the dataframes
+
+    # 9. Create the aggregated DataFrame with the the top 3 topics per author
+    # 9.1 Group by author_id and the topic-subfield combination columns, then count occurrences
+    agg_df = df.groupby(['author_id', 'topic_id_1', 'topic_name_1', 'topic_subfield_id_1', 'topic_subfield_name_1']).size().reset_index(name='Counts')
+    # 9.2 Sort the DataFrame by 'author_id' and 'Counts' in descending order
+    agg_df = agg_df.sort_values(by=['author_id', 'Counts'], ascending=[True, False])
+    # 9.3 Create a ranking variable for 'Counts' in descending order by each 'author_id'
+    agg_df['CountsRanking'] = agg_df.groupby('author_id')['Counts'].rank(method='first', ascending=False).astype(int)
+    # 9.4 Filter, Create a key, and Remove some AuthorsIds (A9999999999 or Null values)
+    agg_df = agg_df[agg_df['CountsRanking'] <= 3]                        # Filter only the top 3 topics for each author
+    agg_df['key'] = agg_df['topic_id_1'] + agg_df['topic_subfield_id_1'] # Create a key for the future merge with the classification
+    agg_df = agg_df[agg_df['author_id'] != 'A9999999999'] # Filter the DataFrame to only include rows where the 'author_id' column is not null
+    agg_df = agg_df[agg_df['author_id'].notnull()] # Filter the DataFrame to only include rows where the 'author_id' column is not null
+    agg_df = agg_df[agg_df['author_id'] != '[None]'] # Filter the DataFrame to only include rows where the 'author_id' column is not null
+
+    # 10. Pivot the DataFrame to wide and do some formatting
+    wide_df = agg_df.pivot(index='author_id', columns='CountsRanking', values=['topic_id_1','topic_name_1','topic_subfield_id_1','topic_subfield_name_1','Counts','key'])
+    wide_df.columns = [f"{col[0]}_Rank{col[1]}" for col in wide_df.columns] # Flatten the multi-level columns for better readability
+    wide_df = wide_df.reset_index()                                         # Reset the index to make 'author_id' a column
+    wide_df = wide_df.rename(columns={'key_Rank1': 'key1', 'key_Rank2': 'key2', 'key_Rank3': 'key3'}) # Change name for the classification merges
+
+    # 11. Open the topics classification dictionary and prepare for the merge
+    fp = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\topics_dictionary_openalex_MG20250512.xlsx"
+    class_df = pd.read_excel(fp) # Read the Excel file into a DataFrame
+    class_df = class_df[class_df['Keep'] == "Yes"] # Filter to delete some duplicates that were introduced due to horrible prior programming from Nico :(
+    sel_cols = ['topic_subfield_key','Research_topic','Research_category']
+    class_df = class_df[sel_cols] # Select the columns to keep
+    class_df = class_df.rename(columns={'topic_subfield_key': 'key1','Research_topic' : 'Research_topic1', 'Research_category': 'Research_category1' })
+    class_df = class_df.drop_duplicates() # Drop duplicates
+
+    # 12. Do sequential merges to get the topics classification at the 1st, 2nd and 3rd level
+    # 12.1 Merge the DataFrames on the 'key1' column
+    wide_df1 = pd.merge(wide_df, class_df, on='key1', how='left') # Merge the DataFrames on the 'key1' column
+    check_duplicates_and_missing_values(wide_df,wide_df1,'Research_topic',check_missing_values = False)
+    class_df = class_df.rename(columns={'key1': 'key2', 'Research_topic1' : 'Research_topic2', 'Research_category1': 'Research_category2'}) # Rename the columns to avoid duplicates
+    # 12.2 Merge the DataFrames on the 'key2' column
+    wide_df2 = pd.merge(wide_df1, class_df, on='key2', how='left') # Merge the DataFrames on the 'key1' column
+    check_duplicates_and_missing_values(wide_df1,wide_df2,'Research_topic',check_missing_values = False)
+    class_df = class_df.rename(columns={'key2': 'key3','Research_topic2' : 'Research_topic3', 'Research_category2': 'Research_category3'})
+    # 12.3 Merge the DataFrames on the 'key3' column
+    wide_df3 = pd.merge(wide_df2, class_df, on='key3', how='left') # Merge the DataFrames on the 'key1' column
+    check_duplicates_and_missing_values(wide_df2,wide_df3,'Research_topic',check_missing_values = False)
+    # 12.4 Select the columns to keep and rename them
+    sel_cols = ['author_id',
+                'Research_category1','Research_topic1','Counts_Rank1','key1',
+                'Research_category2','Research_topic2','Counts_Rank2','key2',
+                'Research_category3','Research_topic3','Counts_Rank3','key3']
+    wide_fdf = wide_df3[sel_cols] # Select the columns to keep
+
+    # 13. Merge with the BusinessEcon Faculty dictionary to get the AARC PersonId and names for tracing purposes
+    # 13.1 Open the BusinessEcon Faculty dictionary and prepare for the merge
+    fp = wd_path + "\\data\\raw\\aarc_openalex_match\\output_files\\aarc_openalex_author_businessecon_dictionary.xlsx"
+    be_df = pd.read_excel(fp) # Read the Excel file into a DataFrame
+    be_df = be_df.rename(columns={'PersonOpenAlexId': 'author_id'}) # Rename the column to match the other DataFrame
+    be_df = be_df[be_df['author_id'] != 'A9999999999'] # Filter the DataFrame to only include rows where the 'PersonOpenAlexId' column is not null
+
+   # 14. Merge the 'wide_fdf' and the 'be_df' DataFrames on the 'author_id' column
+    be_topics_df = pd.merge(be_df, wide_fdf, on='author_id', how='left') # Merge the DataFrames on the 'key1' column
+    check_duplicates_and_missing_values(be_topics_df,be_df,'Research_topic',check_missing_values = False) 
+    
+    # 15. Sort the df, save the final DataFrame and return it
+    be_topics_df = be_topics_df.sort_values(by='AutoMatch', ascending=False) # Sort the DataFrame by the 'AutoMatch' variable in descending order
+    file_path = wd_path + "\\data\\raw\\aarc_openalex_match\\output_files\\aarc_openalex_authors_topics_classification.xlsx"
+    be_topics_df.to_excel(file_path, index=False) # Save the DataFrame to an Excel file
+    print("The authors topics classification DataFrame has been saved to output_files\\aarc_openalex_authors_topics_classification.xlsx") # Print the file path to the user
+    return be_topics_df # Return the final DataFrame with the topics classification 
+
+# Fn61: get_different_name = At a row level extract the corresponding name column value
+def get_different_name(row):
+    # Get the index (e.g., 'name03_test' -> 3)
+    idx = int(row['diff_col_01'][4:6])
+    return row[f'name{idx:02d}']
+
+# Fn62: get_first_diff_name = Get the first name that does not contain the benchmark surname
+def get_first_diff_name(df): 
+    # Get the columns for the tests and names
+    test_cols = [f'name{i:02d}_test' for i in range(1, 11)]
+    name_cols = [f'name{i:02d}' for i in range(1, 11)]
+    # Find the first test column with value 1 for each row
+    first_diff_col = df[test_cols].eq(1).idxmax(axis=1)
+    # Extract the corresponding name column from the name columns
+    df['diff_col_01'] = first_diff_col
+    df['DifferentName_01'] = df.apply(get_different_name, axis=1)
+    # Return the modified DataFrame with the new column
+    return df
+
+# Fn63: get_nth_diff_name = Get the Nth name that does not contain the benchmark surname
+def get_additional_diff_name(df, order_name):
+    # Get the columns for the tests and names
+    test_cols = [f'name{i:02d}_test' for i in range(1, 11)]
+    name_cols = [f'name{i:02d}' for i in range(1, 11)]
+    
+    # For each row, get the list of test columns where value is 1
+    diff_col_names = df[test_cols].eq(1).apply(lambda row: list(row[row].index), axis=1)
+    
+    # Get the Nth (order_name) different column, or None if not enough
+    nth_diff_col = diff_col_names.apply(lambda x: x[order_name-1] if len(x) >= order_name else None)
+    df[f'diff_col_{order_name:02d}'] = nth_diff_col
+
+    # Function to extract the corresponding name value
+    def get_nth_diff_name(row):
+        col = row[f'diff_col_{order_name:02d}']
+        if col is not None and isinstance(col, str):
+            idx = int(col[4:6])
+            return row[f'name{idx:02d}']
+        else:
+            return None
+
+    df[f'DifferentName_{order_name:02d}'] = df.apply(get_nth_diff_name, axis=1)
+    return df
+
+# Fn64: gen_diff_name_null_cols = Generate null columns for the different names
+def gen_diff_name_null_cols(df, num):
+    # Generate null columns for the different names
+    df[f'diff_col_0{num}']      = None # Create a new column for the different name index
+    df[f'DifferentName_0{num}'] = None # Create a new column for the different name
+    return df
+
+# Fn65: female_surname_change_excercise = Get which female authors have changed their surnames in their career
+def female_surname_change_excercise(wd_path):
+    # 0. Open the 'alternative names' df (n)
+    file_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\openalex_authors_alternative_names.csv"
+    n = pd.read_csv(file_path) # Read the CSV file into a DataFrame    
+
+    # 1. Filter women authors
+    # 1.1 Open the BusinessEcon Faculty dictionary to get the AARC PersonId
+    file_path = wd_path + "\\data\\raw\\aarc_openalex_match\\output_files\\aarc_openalex_author_businessecon_dictionary.xlsx"
+    aarc_oa_df = pd.read_excel(file_path, sheet_name = 'Sheet1')
+    aarc_oa_df = aarc_oa_df[['PersonId','PersonName','PersonOpenAlexId']]
+    aarc_oa_df = aarc_oa_df[ aarc_oa_df['PersonOpenAlexId'] != 'A9999999999'] # Filter the DataFrame to only include rows where the 'PersonOpenAlexId' column is not null
+    aarc_oa_df = aarc_oa_df.rename(columns={'PersonOpenAlexId': 'id'}) # Rename the column to match the other DataFrame
+    # 1.2 Open the original BusinessEcon Faculty list and get the gender information
+    file_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\BusinessEconFacultyLists.csv"
+    be_fac_df = pd.read_csv(file_path, encoding='latin1') # Read the CSV file into a DataFrame   
+    be_fac_df = be_fac_df[['PersonId','Gender']]
+    be_fac_df = be_fac_df.drop_duplicates()
+    # 1.3 Merge the two DataFrames to get the Gender information
+    aarc_oa_be_fac_df = pd.merge(aarc_oa_df, be_fac_df, on='PersonId', how='left') # Merge the two DataFrames on the 'PersonId' column
+    check_duplicates_and_missing_values(original_df = aarc_oa_df ,new_df = aarc_oa_be_fac_df,column_name = 'Gender', check_missing_values = False)
+    # 1.4 Merge with the authors alternative names DataFrame
+    aarc_oa_be_fac_n_df = pd.merge(aarc_oa_be_fac_df, n, on='id', how='left') # Merge the two DataFrames on the 'id' column
+    check_duplicates_and_missing_values(original_df = aarc_oa_be_fac_df ,new_df = aarc_oa_be_fac_n_df, column_name = 'PersonId', check_missing_values = False)
+    # 1.5 Get to know how many alternative names are there and their frecuency
+    summ_df = n.groupby('alternative_names_num').size().reset_index(name='Counts')
+    total_c  = summ_df['Counts'].sum() # Calculate the total of the 'Counts' column
+    summ_df['share'] = summ_df['Counts'] / total_c # Add a new column 'share' that shows the share of each count with respect to the total
+    summ_df = summ_df.sort_values(by='share', ascending=False) # Sort the DataFrame by the 'share' column in descending order
+    print(summ_df) # Print the summary DataFrame
+    print("Decision: The test excercise will be carried on, until the alternative name 10.")
+    # 1.6 Unpack the alternative names in different columns and remove redundant columns (name11 to name63)
+    aarc_oa_be_fac_n_df['display_name_alternatives'] = aarc_oa_be_fac_n_df['display_name_alternatives'].apply(ast.literal_eval) # Parse the JSON-like strings into Python lists
+    # Dynamically create new columns for alternative names
+    max_alternatives = aarc_oa_be_fac_n_df['alternative_names_num'].max()  # Find the maximum number of alternatives
+    for i in range(1, max_alternatives + 1):
+        aarc_oa_be_fac_n_df[f'name{i:02d}'] = aarc_oa_be_fac_n_df['display_name_alternatives'].apply(lambda x: x[i - 1] if i <= len(x) else '')
+    # Drop all columns in n_df that match the pattern 'name11' to 'name63'
+    columns_to_drop = [col for col in aarc_oa_be_fac_n_df.columns if col.startswith('name') and 11 <= int(col[4:]) <= 63]
+    aarc_oa_be_fac_n_df = aarc_oa_be_fac_n_df.drop(columns=columns_to_drop)
+    # 1.7 Create the SurnameBenchmark in which we will compare the surnames
+    aarc_oa_be_fac_n_df = format_authors_names(df = aarc_oa_be_fac_n_df, var_name ='display_name', message=True) # Split the regular name in pieces
+    # Get only the surnames from the regular name and the alternative name
+    aarc_oa_be_fac_n_df['SurnameBenchmark'] = aarc_oa_be_fac_n_df.apply(
+            lambda row: row[f'display_name_{row["display_name_tot"]}'], axis=1) # Get the surname from the OpenAlex data
+    aarc_oa_be_fac_n_df['SurnameBenchmark'] = aarc_oa_be_fac_n_df['SurnameBenchmark'].apply(unidecode) # Remove accents
+    aarc_oa_be_fac_n_df['SurnameBenchmark'] = aarc_oa_be_fac_n_df['SurnameBenchmark'].str.replace('-', '') # Remove hyphens
+    aarc_oa_be_fac_n_df['SurnameBenchmark'] = aarc_oa_be_fac_n_df['SurnameBenchmark'].str.replace("'", '') # Remove single quotes
+    aarc_oa_be_fac_n_df['SurnameBenchmark'] = aarc_oa_be_fac_n_df['SurnameBenchmark'].str.upper() # Put the surname in upper case
+    # Drop all columns in n_df that match the pattern 'display_name_1' to 'display_name_11'
+    columns_to_drop = ['display_name_1','display_name_2','display_name_3','display_name_4',
+                    'display_name_5','display_name_6','display_name_7','display_name_8', 
+                    'display_name_9','display_name_10','display_name_11',
+                    'display_name_tot']
+    aarc_oa_be_fac_n_df = aarc_oa_be_fac_n_df.drop(columns=columns_to_drop)
+
+    # CHANGE OF SURNAME EXCERCISE
+    surname_df = aarc_oa_be_fac_n_df.copy()
+    # 1. For the columns 'name01' to 'name10', test whether the value is null and if it is not, then remove accents and hyphens
+    for i in range(1, 11):
+        col = f'name{i:02d}'
+        if col in surname_df.columns:
+            surname_df[col] = surname_df[col].apply(
+                lambda x: unidecode(x).replace('-', '').replace("'", '').upper() if pd.notnull(x) else x
+            )
+    # 2. Create 10 columns that will be used to store the results of the tests
+    for i in range(1, 11):
+        col = f'name{i:02d}_test'
+        surname_df[col] = 0
+    # 3. Run a contain test: Try to find the SurnameBenchmark in each of the alternative names
+    for i in range(1, 11):
+        name_col = f'name{i:02d}'
+        test_col = f'name{i:02d}_test'
+        if name_col in surname_df.columns:
+            surname_df[test_col] = surname_df.apply(
+                lambda row: 0 if pd.isnull(row[name_col]) or row[name_col] == '' 
+                else (0 if row['SurnameBenchmark'] in str(row[name_col]) else 1),
+                axis=1
+            )
+    # 4. Summarize the results of the tests in a single column
+    surname_df['name_test'] = surname_df[[f'name{i:02d}_test' for i in range(1, 11)]].sum(axis=1)
+
+    # 5. Filter those with at least one alternative name that does not contain the benchmark surname
+    change_name_df = surname_df[(surname_df['name_test'] > 0) & (surname_df['Gender'] == "F")] # Filter the DataFrame to only include rows where the 'name_test' column is greater than 0
+
+    # 6. Format the change_name_df to know which name is the one that does not contain the benchmark surname
+    # 6.1: 1 name that does not contain the benchmark surname
+    cn_df_01 = change_name_df[change_name_df['name_test'] == 1] # Only with 1 name that does not contain the benchmark surname
+    cn_df_01 = get_first_diff_name(cn_df_01) # Get the first name that does not contain the benchmark surname
+    cn_df_01 = gen_diff_name_null_cols(df=cn_df_01,num=2) # Generate null columns for the second name
+    cn_df_01 = gen_diff_name_null_cols(df=cn_df_01,num=3) # Generate null columns for the third name
+    cn_df_01 = gen_diff_name_null_cols(df=cn_df_01,num=4) # Generate null columns for the fourth name
+    cn_df_01 = gen_diff_name_null_cols(df=cn_df_01,num=5) # Generate null columns for the fifth name
+    # 6.2: 2 names that do not contain the benchmark surname
+    cn_df_02 = change_name_df[change_name_df['name_test'] == 2] # 2 names that do not contain the benchmark surname
+    cn_df_02 = get_first_diff_name(cn_df_02) # Get the first name that does not contain the benchmark surname
+    cn_df_02 = get_additional_diff_name(cn_df_02, order_name=2) # Get the second name that does not contain the benchmark surname
+    cn_df_02 = gen_diff_name_null_cols(df=cn_df_02,num=3) # Generate null columns for the third name
+    cn_df_02 = gen_diff_name_null_cols(df=cn_df_02,num=4) # Generate null columns for the fourth name
+    cn_df_02 = gen_diff_name_null_cols(df=cn_df_02,num=5) # Generate null columns for the fifth name
+    # 6.3: 3 names that do not contain the benchmark surname
+    cn_df_03 = change_name_df[change_name_df['name_test'] == 3] # 3 names that do not contain the benchmark surname
+    cn_df_03 = get_first_diff_name(cn_df_03) # Get the first name that does not contain the benchmark surname
+    cn_df_03 = get_additional_diff_name(cn_df_03, order_name=2) # Get the second name that does not contain the benchmark surname
+    cn_df_03 = get_additional_diff_name(cn_df_03, order_name=3) # Get the third name that does not contain the benchmark surname
+    cn_df_03 = gen_diff_name_null_cols(df=cn_df_03,num=4) # Generate null columns for the fourth name
+    cn_df_03 = gen_diff_name_null_cols(df=cn_df_03,num=5) # Generate null columns for the fifth name
+    # 6.4: 4 names that do not contain the benchmark surname
+    cn_df_04 = change_name_df[change_name_df['name_test'] == 4] # 4 names that do not contain the benchmark surname
+    cn_df_04 = get_first_diff_name(cn_df_04) # Get the first name that does not contain the benchmark surname
+    cn_df_04 = get_additional_diff_name(cn_df_04, order_name=2) # Get the second name that does not contain the benchmark surname
+    cn_df_04 = get_additional_diff_name(cn_df_04, order_name=3) # Get the third name that does not contain the benchmark surname
+    cn_df_04 = get_additional_diff_name(cn_df_04, order_name=4) # Get the fourth name that does not contain the benchmark surname
+    cn_df_04 = gen_diff_name_null_cols(df=cn_df_04,num=5) # Generate null columns for the fifth name
+    # 6.5: 5 names that do not contain the benchmark surname
+    cn_df_05 = change_name_df[change_name_df['name_test'] == 5] # 5 names that do not contain the benchmark surname
+    cn_df_05 = get_first_diff_name(cn_df_05) # Get the first name that does not contain the benchmark surname
+    cn_df_05 = get_additional_diff_name(cn_df_05, order_name=2) # Get the second name that does not contain the benchmark surname
+    cn_df_05 = get_additional_diff_name(cn_df_05, order_name=3) # Get the third name that does not contain the benchmark surname
+    cn_df_05 = get_additional_diff_name(cn_df_05, order_name=4) # Get the fourth name that does not contain the benchmark surname
+    cn_df_05 = get_additional_diff_name(cn_df_05, order_name=5) # Get the fifth name that does not contain the benchmark surname
+
+    # 7. Concatenate the dfs and select relevant columns
+    cn_df = pd.concat([cn_df_01, cn_df_02, cn_df_03, cn_df_04, cn_df_05], ignore_index=True) # Concatenate the DataFrames
+    # 7.1 Select relevant columns
+    sel_cols = ['PersonId', 'PersonName', 'id', 'Gender', 'display_name','SurnameBenchmark','name_test',
+                'DifferentName_01','DifferentName_02','DifferentName_03','DifferentName_04','DifferentName_05']
+    cn_df = cn_df[sel_cols] # Select the columns to keep
+
+    # 8. Remove false positives using a manual file
+    # 8.1 Read the manual check file
+    fp = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\gender_surname_manual_check.xlsx"
+    mnc_df = pd.read_excel(fp) # Read the manual check file
+    sel_cols_mnc = ['PersonId', 'ManualNameCheck']
+    mnc_df = mnc_df[sel_cols_mnc] # Select the columns to keep
+    # 8.2 Merge the manual check file with the DataFrame
+    cn_mnc_df = pd.merge(cn_df, mnc_df, on='PersonId', how='left') # Merge the DataFrames on the 'PersonId' column
+    check_duplicates_and_missing_values(original_df = cn_df ,new_df = cn_mnc_df, column_name = 'ManualNameCheck', check_missing_values = True)
+    # IMPORTANT INFO: When 'ManualNameCheck' == 'Y' it means there is a false positive (the alternative name is the same as the regular name), however there is a small spelling mistake.
+    #                 Therefore, we remove all the rows where 'ManualNameCheck' == 'Y' from the DataFrame.
+    cn_mnc_df = cn_mnc_df[cn_mnc_df['ManualNameCheck'] != 'Y'] # Remove the rows where 'ManualNameCheck' == 'Y'
+    cn_mnc_df = cn_mnc_df.drop(columns=['ManualNameCheck']) # Drop the 'ManualNameCheck' column as it is not needed anymore
+
+    # 9. Save the final DataFrame to an Excel file
+    fp = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\aarc_openalex_females_with_surname_change.xlsx"
+    cn_mnc_df.to_excel(fp, index=False) # Save the test DataFrame to an Excel file
+    print(f"File 'aarc_oa_females_with_surnames_change' saved") # Print the file path to the user
+
+    # 10. Return the final DataFrame
+    return cn_mnc_df # Return the final DataFrame with the surname
 
 # End of file
