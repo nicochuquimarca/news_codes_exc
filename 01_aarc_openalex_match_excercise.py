@@ -168,73 +168,151 @@ for i in range(0,num_batches):          # Iterate over each batch
 # 11.3 Save the final dataframe and produce the topics classification df
 at, be_atc = aarc_oa.gen_final_author_topics_csv(wd_path = wd_path)
 
+# 12. Match Non-AARC authors (Scopus) with OpenAlex (Fabrizio request)
+# Scopus API Key = "b4e05d3254be1d55b8e29dc0948d8a3a"
+# Job: Build a scraper that searches by scopus author id
+# An example: https://api.openalex.org/authors/scopus:6507960713
+
+
+# 0. Open Fabrizio's file with the Scopus authors and do some minor formatting
+fp = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\Data_for_Nicholas.csv"
+df = pd.read_csv(fp) # Read the file
+# 0.1 Prepare 'personid' column for any potential match
+df['personid'] = df['personid'].fillna(0)
+df['personid'] = df['personid'].astype(int)
+df.rename(columns = {'personid':'PersonId'}, inplace = True)
+
+# 1. Split the guys with a value distinct from 'nan' in the personid column
+nn_df = df[df['PersonId'] != 0] # Filter the DataFrame to only include rows where the 'PersonId' column is not null
+n_df = df[df['PersonId']  == 0] # Filter the DataFrame to only include rows where the 'PersonId' column is null
+
+# 2. Work with the non-null personid DataFrame (get the OpenAlexId and the name)
+fp = wd_path + "\\data\\raw\\aarc_openalex_match\\output_files\\aarc_openalex_author_businessecon_dictionary.xlsx"
+be_df = pd.read_excel(fp) # Read the BusinessEcon Faculty list
+# 2.1 Do a merge to get the OpenAlexId and the name
+nn_be_df = pd.merge(nn_df, be_df, on='PersonId', how='left') # Merge the two DataFrames on the 'PersonId' column
+aarc_oa.check_duplicates_and_missing_values(original_df = nn_df, new_df = nn_be_df, column_name = 'PersonOpenAlexId', check_missing_values = False) # Check the duplicates and missing values
+
+# 3. Work with the null personid DataFrame (get the OpenAlexId and the name)
+tdf = n_df.head(50) 
+tdf
+
+
+# Examples
+# An example: https://api.openalex.org/authors/scopus:6507960713
+# 6507960713   peter rebiero
+# 57207796740  gerald á¸§ubl    
+# 7203065569   ellen peters     
+# 6603360672   benedict dellaert
+# 57208724089  daniel goldstein 
+# 56228692400  steve bellman    
+# 7402508587   john little      
+
+# FnXX: get_openalex_id = Function to get the OpenAlexId and the name from a Scopus author id
+def get_openalex_id(sid):
+    # 1. Call the API
+    surl         = 'https://api.openalex.org/authors/scopus:' + sid # Define the URL to call the API
+    api_response = requests.get(surl)
+
+    # 2 Check if the response is successful
+    api_response_test = api_response.status_code
+
+    # 3. If the response is not successful, return an empty dataframe
+    if api_response_test != 200:
+        api_found = 'No'
+        df = pd.DataFrame({
+        'ScopusAuthorId'    : [sid],
+        'PersonOpenAlexId'  : [None],
+        'PersonOpenAlexName': [None],
+        'api_found'         : [api_found]
+        })
+        return df
+    # 4. If the response is successful, continue 
+    elif api_response_test == 200: 
+      # 4.1 Get the data
+      api_data = api_response.json() # Extract the JSON data from the response
+      # 4.2 Transform from JSON to DataFrame
+      api_found = 'Yes' # Set the api_found variable to 'Yes'
+      oa_id   = api_data['id']
+      oa_name = api_data['display_name']
+      df = pd.DataFrame({
+        'ScopusAuthorId'    : [sid],
+        'PersonOpenAlexId'  : [oa_id],
+        'PersonOpenAlexName': [oa_name],
+        'api_found'         : [api_found]
+        })
+      # 4.3 Do some formatting
+      df = aarc_oa.delete_links(df,['PersonOpenAlexId']) # Delete the links in the 'PersonOpenAlexId' column
+      # 4.4 Return the DataFrame with the OpenAlexId and the name
+      return df # Return the DataFrame with the OpenAlexId and the name
+
+# FnXX: process_scopus_openalex_ids = Function that enable multiple workers to call the get_openalex_id function
+def process_scopus_openalex_ids(sid):
+    # 3 workers --> time sleep = 0.05
+    # 4 workers --> time sleep = 0.20
+    time.sleep(0.06) # Introduce a small delay between requests
+    return get_openalex_id(sid)
+
+
+# Fnxx: linear_scopus_openalex_scraper = Linear process to get the openalex id from a list of scopus author ids 
+def linear_scopus_openalex_scraper(wd_path,sid_vec):
+    # Linear process
+    sid_list = []
+    # Iterate over the sid_ids
+    for current_iter, sid in enumerate(sid_vec, start=1):  # start=1 to start counting from 1
+        # Get the df of the current scopus author id
+        df_scopus_oa = get_openalex_id(sid)
+        # Append the df to the list
+        sid_list.append(df_scopus_oa)
+    # Concatenate the list of dataframes
+    linear_scopus_oa_df = pd.concat(sid_list, axis = 0)
+    # Save the DataFrame
+    # Get the dates to save the files
+    current_time = datetime.now()
+    date_string  = aarc_oa.date_time_string(current_time = current_time)
+    path = wd_path +"\\data\\raw\\aarc_openalex_match\\input_files\\scopusid_openalexid\\scopusid_openalexid_"+date_string+".csv"
+    linear_scopus_oa_df.to_csv(path, index = False)
+    print("Author Scopus ID and OpenAlex ID information has been saved in the following path: ", path)
+    # Return the DataFrame
+    return linear_scopus_oa_df
+
+
+# Fnxx: parallel_scopus_openalex_scraper = Parallel process to get the openalex id from a list of scopus author ids
+def parallel_paper_scraper(wd_path,sid_vec):
+    # Parallel process, limited to 3 workers due to API response constraints
+    # Initialize an empty list to store the results
+    sid_list = []
+    
+    # Use ThreadPoolExecutor to parallelize the API requests
+    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+        # Map the process_paper_authors function to the doi_vec
+        results = list(executor.map(process_scopus_openalex_ids, sid_vec))
+        # Filter out None or empty DataFrames
+        sid_list = [df for df in results if df is not None and not df.empty]
+    
+    # Concatenate the list of dataframes
+    parallel_scopus_oa_df = pd.concat(sid_list, axis=0)
+    current_time = datetime.now()
+    date_string  = aarc_oa.date_time_string(current_time = current_time)
+    path = wd_path +"\\data\\raw\\aarc_openalex_match\\input_files\\scopusid_openalexid\\scopusid_openalexid_"+date_string+".csv"
+    parallel_scopus_oa_df.to_csv(path, index = False)
+    print("Author Scopus ID and OpenAlex ID information has been saved in the following path: ", path)
+    # Return the DataFrame
+    return parallel_scopus_oa_df
 
 
 
-###################################################
-# SEND THE PENDING TO BE MATCHED AUTHORS TO JORGE
-# Step 1: Run the match_df code to get the match_df DataFrame (point #8. in this file).
-# Step 2: Filter to get the people that are in the DOI files but have not been matched yet
-df_pending = match_df[match_df['MatchStatus'] == 'DOI Only'] # Filter the DataFrame to only include rows where the 'PersonOpenAlexId' column is null
-df_pending = df_pending[['PersonId','MatchStatus']] # Select the relevant columns
-# Step 3: Merge the papers data with the df_pending 
-fp01 = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\AARC_people_DOI.xlsx"
-df_doi_papers = pd.read_excel(fp01, sheet_name = "Sheet1") # Read the AARC people DOI file
-df_doi_papers = df_doi_papers[['aarc_personid','doi','aarc_name']] # Select the relevant columns
-df_doi_papers = df_doi_papers.rename(columns={'aarc_personid':'PersonId','doi':'DOI','aarc_name':'PersonName'}) # Rename the columns
-df_doi_papers_pending = pd.merge(df_doi_papers, df_pending, on='PersonId', how='left') # Merge the two DataFrames on the 'PersonId' column
-aarc_oa.check_duplicates_and_missing_values(original_df = df_doi_papers ,new_df = df_doi_papers_pending,column_name = 'MatchStatus', check_missing_values = False) # Check the duplicates and missing values
-df_doi_papers_pending = df_doi_papers_pending[ df_doi_papers_pending['MatchStatus'] == 'DOI Only'] # Select the relevant columns
-# Step 4: See how many of the papers with pending authors have actually been queried from OpenAlex
-fp02 = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\doi_papers_authors_openalex.csv"
-df_DOI_OA_papers = pd.read_csv(fp02) # Read the BusinessEcon Faculty list
-df_DOI_OA_papers = df_DOI_OA_papers[['paper_doi','api_found']] # Select the AARCId and Names
-df_DOI_OA_papers = df_DOI_OA_papers.rename(columns = {'paper_doi':'DOI'}) # Rename the columns
-df_DOI_OA_papers = df_DOI_OA_papers.drop_duplicates() # Delete the duplicates
-df_doi_papers_pending_oa = pd.merge(df_doi_papers_pending, df_DOI_OA_papers, on='DOI', how='left') # Merge the two DataFrames on the 'DOI' column
-aarc_oa.check_duplicates_and_missing_values(original_df = df_doi_papers_pending ,new_df = df_doi_papers_pending_oa, column_name = 'api_found', check_missing_values = True) # Check the duplicates and missing values
-# Step 5: Remove the authors that have papers with a failed OpenAlex query
-# 5.1 Identify the authors
-df_failed_oa_papers_authors = df_doi_papers_pending_oa.copy()
-df_failed_oa_papers_authors = df_failed_oa_papers_authors[['PersonId','api_found']] # Select the relevant columns
-df_failed_oa_papers_authors = df_failed_oa_papers_authors.drop_duplicates() # Delete the duplicates
-df_failed_oa_papers_authors['PersonId_Count'] = df_failed_oa_papers_authors.groupby('PersonId')['PersonId'].transform('size')
-df_failed_oa_papers_authors['Mixed_api_found'] = np.where(
-        df_failed_oa_papers_authors['PersonId_Count'] == 1.0, 'No',
-        np.where(
-            (df_failed_oa_papers_authors['PersonId_Count'] > 1.0), 'Yes','Unknown'
-        )
-    )
-df_failed_oa_papers_authors = df_failed_oa_papers_authors[df_failed_oa_papers_authors['Mixed_api_found'] == 'No']
-df_failed_oa_papers_authors = df_failed_oa_papers_authors[df_failed_oa_papers_authors['api_found'] == 'No'] 
-# 5.2 Save the failed authors for the record
-df_failed_oa_papers_authors['Failed_Author'] = "Yes"
-fp_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\Jorge_matching_help\\failed_oa_papers_authors.xlsx"
-df_failed_oa_papers_authors.to_excel(fp_path, index=False) # Save the file to check the results
-# 5.3 Merge with the 'df_doi_papers_pending_oa' df and remove the failed authors
-df_failed_oa_papers_authors = df_failed_oa_papers_authors[['PersonId','Failed_Author']] # Select the relevant columns
-df_doi_papers_pending_oa_rfa = pd.merge(df_doi_papers_pending_oa, df_failed_oa_papers_authors, on='PersonId', how='left') # Merge the two DataFrames on the 'PersonId' column
-aarc_oa.check_duplicates_and_missing_values(original_df = df_doi_papers_pending_oa ,new_df = df_doi_papers_pending_oa_rfa, column_name = 'Failed_Author', check_missing_values = False) # Check the duplicates and missing values
-df_doi_papers_pending_oa_rfa = df_doi_papers_pending_oa_rfa[df_doi_papers_pending_oa_rfa['Failed_Author'] != 'Yes'] # Select the relevant columns
-df_doi_papers_pending_oa_rfa = df_doi_papers_pending_oa_rfa.drop('Failed_Author', axis=1)
-# Step 6: Save this file to be sent to Jorge
-fp_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\Jorge_matching_help\\aarc_doi_pending_matching.xlsx"
-df_doi_papers_pending_oa_rfa.to_excel(fp_path, index=False) # Save the file to check the results
-# Step 7. Produce the file that contains the OpenAlex data to be matched with
-# 7.1 Get all the data queried from OpenAlex
-fp = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\\doi_papers_authors_openalex.csv"
-df_doi_oa_papers = pd.read_csv(fp) # Read the BusinessEcon Faculty list
-df_doi_oa_papers = df_doi_oa_papers.rename(columns = {'paper_doi':'DOI'}) # Rename the columns
-# 7.2 Prepare the data
-df_dois_to_merge = df_doi_papers_pending_oa_rfa[['DOI']] # Select the relevant columns
-df_dois_to_merge = df_dois_to_merge.drop_duplicates() # Delete the duplicates
-df_dois_to_merge['dummy_col'] = 1 # Create a dummy column to merge
-# 7.3 Merge the two DataFrames to get the OpenAlex data
-df_doi_oa_papers_match = pd.merge(df_doi_oa_papers, df_dois_to_merge, on='DOI', how='left') # Merge the two DataFrames on the 'DOI' column
-aarc_oa.check_duplicates_and_missing_values(original_df = df_doi_oa_papers,new_df = df_doi_oa_papers_match, column_name = 'dummy_col', check_missing_values = False) # Check the duplicates and missing values
-# 7.4 Keep the papers that are in the DOI files and in the OpenAlex data
-df_doi_oa_papers_match = df_doi_oa_papers_match[df_doi_oa_papers_match['dummy_col'] == 1] # Select the relevant columns
-# 7.5 Save the file to be sent to Jorge
-fp_path = wd_path + "\\data\\raw\\aarc_openalex_match\\input_files\\Jorge_matching_help\\doi_papers_authors_openalex_reduced.xlsx"
-df_doi_oa_papers_match.to_excel(fp_path, index=False) # Save the file to check the results
+# Test the linear process
+sid_vec = ['6507960713','57207796740','7203065569','6603360672','57208724089','56228692400','7402508587']
+z = linear_scopus_openalex_scraper(wd_path = wd_path, sid_vec = sid_vec) # Call the function to get the OpenAlexId and the name
+z = parallel_paper_scraper(wd_path = wd_path, sid_vec = sid_vec) # Call the function to get the OpenAlexId and the name
+
+
+
+
+
+# Test the single function
+x = '6507960713'  # This works  
+x = '057207796740' # This does not work
+y = get_openalex_id(sid = x) # Call the function to get the OpenAlexId and the name
 

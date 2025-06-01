@@ -78,7 +78,7 @@
 # Fn38: gen_final_data_with_oa_ids                 = Generate the final data with the OpenAlex ids
 # Fn39: prepare_twitter_data                       = Prepare the twitter data for the twitter-openalex-aarc matching (1:1 matching)
 # Fn40: merge_aux_df                               = Use the auxiliary file to know which authors to keep from the duplicates df
-# Fn41 gen_aarc_openalex_dictionary                = Generate the AARC-OpenAlex dictionary depending on the type of dictionary (reduced vs full sample)
+# Fn41: gen_aarc_openalex_dictionary               = Generate the AARC-OpenAlex dictionary depending on the type of dictionary (reduced vs full sample)
 # Fn42: get_aarc_openalex_dictionary_progress      = Get the AARC-OpenAlex dictionary progress
 # Bernhard functions start here
 # Fn43: fix_name                                   = Fix names by  capitalizing the first letter, and swapings the first and last names
@@ -97,7 +97,7 @@
 # Fn55: get_author_topics                          = Function to get the author topics, subfields, and fields of study from OpenAlex
 # Fn56: linear_author_topics_scraper               = Linear function to scrape author topics, subfields, fields, and domains from OpenAlex
 # Fn57: gen_author_topics_df                       = Generate the author topics DataFrame
-# Fn58:gen_final_author_topics_csv                 = Generate the topics, Subfields, Fields, and Domains at the author level csv file
+# Fn58: gen_final_author_topics_csv                = Generate the topics, Subfields, Fields, and Domains at the author level csv file
 # Fn59: gen_author_topics_to_call                  = Generate the authors topics from the BusinessEcon Dictiionary to call the OpenAlex API
 # Fn60: gen_authors_topics_via_papers              = Generate the authors topics classification DataFrame via the papers information
 # Fn61: get_different_name                         = At a row level extract the corresponding name column value
